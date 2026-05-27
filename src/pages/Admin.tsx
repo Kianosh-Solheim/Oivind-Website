@@ -5,6 +5,7 @@ import { collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, query, or
 import TextareaAutosize from 'react-textarea-autosize';
 import RichTextEditor from '../components/RichTextEditor';
 import { ArrowLeft, Plus } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import FileManager from '../components/FileManager';
 import ImagePickerModal from '../components/ImagePickerModal';
@@ -28,6 +29,8 @@ interface Book {
 
 export default function Admin() {
   const { user, signInWithGoogle, logout } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   
   const [articles, setArticles] = useState<Article[]>([]);
   const [books, setBooks] = useState<Book[]>([]);
@@ -42,8 +45,18 @@ export default function Admin() {
   useEffect(() => {
     if (user) {
       loadData();
+      
+      const params = new URLSearchParams(location.search);
+      if (params.get('compose') === 'true') {
+        const lang = params.get('lang') || 'no';
+        setEditingArticleId(null);
+        setArticleForm({ title: '', content: '', published: true, language: lang, slug: '', imageUrl: '' });
+        setIsComposing(true);
+        // Clear params so it doesn't stay in URL unnecessarily
+        navigate('/admin', { replace: true });
+      }
     }
-  }, [user]);
+  }, [user, location.search, navigate]);
 
   const loadData = async () => {
     try {
@@ -64,14 +77,13 @@ export default function Admin() {
       return;
     }
     try {
-      const articleData = {
+      const articleData: any = {
         title: articleForm.title,
         content: articleForm.content,
         published: articleForm.published,
         language: articleForm.language,
         slug: articleForm.slug || articleForm.title.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
-        imageUrl: articleForm.imageUrl,
-        authorId: user.uid,
+        imageUrl: articleForm.imageUrl || '',
         updatedAt: serverTimestamp()
       };
 
@@ -80,6 +92,7 @@ export default function Admin() {
       } else {
         await addDoc(collection(db, 'articles'), {
           ...articleData,
+          authorId: user.uid,
           createdAt: serverTimestamp(),
         });
       }

@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { ArrowLeft, Plus } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import { db } from '../lib/firebase';
 import { collection, getDocs, query, orderBy, where } from 'firebase/firestore';
-import { stripHtml } from '../lib/utils'; // ensures excerpts display cleanly
+import { stripHtml } from '../lib/utils';
+import { useAuth } from '../lib/AuthContext';
 
 interface Article {
   id: string;
@@ -18,6 +19,10 @@ interface Article {
 export default function Refleksjoner() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  const isAdmin = user?.email === 'kianoshsolheim@gmail.com' || user?.email === 'oivindsolheim@gmail.com';
 
   useEffect(() => {
     const fetchArticles = async () => {
@@ -80,6 +85,16 @@ export default function Refleksjoner() {
           </div>
         )}
       </section>
+
+      {isAdmin && (
+        <button
+          onClick={() => navigate('/admin?compose=true&lang=no')}
+          className="fixed bottom-8 right-8 w-14 h-14 bg-brand-dark text-white rounded-full shadow-lg flex items-center justify-center hover:bg-black transition-colors hover:scale-110 z-50 group"
+          title="Ny Artikkel (Norsk)"
+        >
+          <Plus className="w-6 h-6" />
+        </button>
+      )}
     </div>
   );
 }

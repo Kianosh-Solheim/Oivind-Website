@@ -1,5 +1,6 @@
 import { ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import heroImg from '../assets/bilde_framside.jpeg';
 
 export default function Home() {
   return (
@@ -8,9 +9,10 @@ export default function Home() {
       <section className="relative h-[80vh] min-h-[600px] w-full bg-brand-dark flex flex-col justify-center px-6 md:px-12 lg:px-24 object-cover overflow-hidden">
         <div className="absolute inset-0 z-0">
           <img 
-            src="https://images.unsplash.com/photo-1490682143684-14369e18dce8?q=80&w=2070&auto=format&fit=crop" 
-            alt="Nordic fjords and mountains" 
+            src={heroImg}
+            alt="Lake mirroring sky" 
             className="w-full h-full object-cover object-center opacity-70"
+            referrerPolicy="no-referrer"
           />
           <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/40 to-transparent"></div>
         </div>
