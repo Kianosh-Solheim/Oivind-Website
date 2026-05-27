@@ -71,7 +71,7 @@ export default function EnglishArticles() {
               <article key={article.id} className="bg-white border border-brand-sand flex flex-col h-full hover:-translate-y-1 transition-transform duration-300 overflow-hidden group">
                 {article.imageUrl && (
                   <div className="w-full h-48 md:h-64 overflow-hidden bg-brand-sand">
-                    <img src={article.imageUrl} alt={article.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                    <img loading="lazy" src={article.imageUrl} alt={article.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
                   </div>
                 )}
                 <div className="p-8 md:p-12 flex flex-col flex-grow w-full">

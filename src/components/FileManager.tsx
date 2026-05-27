@@ -15,8 +15,12 @@ export default function FileManager({ onSelect }: { onSelect?: (url: string) => 
   const { user } = useAuth();
   const [images, setImages] = useState<ImageFile[]>([]);
   const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
   
+  // Custom dialog states to replace window.*
+  const [uploadPrompt, setUploadPrompt] = useState<{file: File, filename: string} | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -40,14 +44,15 @@ export default function FileManager({ onSelect }: { onSelect?: (url: string) => 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setUploadPrompt({ file, filename: file.name });
+  };
 
-    const filename = window.prompt("Tast inn filnavn (filename):", file.name);
-    if (!filename) {
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      return;
-    }
-
+  const executeUpload = () => {
+    if (!uploadPrompt || !uploadPrompt.filename.trim()) return;
+    
     setUploading(true);
+    const { file, filename } = uploadPrompt;
+    
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new globalThis.Image();
@@ -73,14 +78,15 @@ export default function FileManager({ onSelect }: { onSelect?: (url: string) => 
         }
         
         if (dataUrl.length > 1000000) {
-          alert("Image is too complex/large even after compression. Please use a smaller image.");
+          console.error("Image is too complex/large even after compression.");
           setUploading(false);
+          setUploadPrompt(null);
           return;
         }
 
         try {
           await addDoc(collection(db, 'images'), {
-            filename: filename,
+            filename: filename.trim(),
             url: dataUrl,
             authorId: user!.uid,
             createdAt: serverTimestamp()
@@ -88,9 +94,9 @@ export default function FileManager({ onSelect }: { onSelect?: (url: string) => 
           loadImages();
         } catch (err) {
           console.error("Upload error", err);
-          alert("Failed to upload image. It might be too large.");
         } finally {
           setUploading(false);
+          setUploadPrompt(null);
           if (fileInputRef.current) fileInputRef.current.value = '';
         }
       };
@@ -99,10 +105,11 @@ export default function FileManager({ onSelect }: { onSelect?: (url: string) => 
     reader.readAsDataURL(file);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Slett dette bildet?")) return;
+  const handleDelete = async () => {
+    if (!deleteId) return;
     try {
-      await deleteDoc(doc(db, 'images', id));
+      await deleteDoc(doc(db, 'images', deleteId));
+      setDeleteId(null);
       loadImages();
     } catch (e) {
       console.error(e);
@@ -110,8 +117,8 @@ export default function FileManager({ onSelect }: { onSelect?: (url: string) => 
   };
 
   const copyToClipboard = (url: string) => {
-    navigator.clipboard.writeText(url);
-    alert("URL kopiert!");
+    navigator.clipboard.writeText(url).catch(console.error);
+    // Silent copy instead of alert
   };
 
   return (
@@ -121,14 +128,13 @@ export default function FileManager({ onSelect }: { onSelect?: (url: string) => 
         
         <label className="cursor-pointer bg-brand-dark text-white px-4 py-2 text-xs font-semibold tracking-widest uppercase hover:bg-black transition-colors flex items-center">
           <Plus className="w-4 h-4 mr-2" /> 
-          {uploading ? 'Laster opp...' : 'Last opp bilde'}
+          Last opp bilde
           <input 
             type="file" 
             accept="image/*" 
             className="hidden" 
             ref={fileInputRef}
             onChange={handleFileSelect} 
-            disabled={uploading}
           />
         </label>
       </div>
@@ -145,7 +151,7 @@ export default function FileManager({ onSelect }: { onSelect?: (url: string) => 
                 className="w-full h-32 bg-gray-50 flex items-center justify-center overflow-hidden cursor-pointer"
                 onClick={() => onSelect && onSelect(img.url)}
               >
-                <img src={img.url} alt={img.filename} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                <img loading="lazy" src={img.url} alt={img.filename} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
               </div>
               <div className="p-3 flex justify-between items-center border-t border-gray-50 bg-white z-10">
                 <span className="text-xs font-semibold truncate max-w-[120px]" title={img.filename}>{img.filename}</span>
@@ -153,7 +159,7 @@ export default function FileManager({ onSelect }: { onSelect?: (url: string) => 
                   <button onClick={() => copyToClipboard(img.url)} className="text-brand-muted hover:text-brand-dark" title="Kopier URL">
                     <Copy className="w-4 h-4" />
                   </button>
-                  <button onClick={() => handleDelete(img.id!)} className="text-red-400 hover:text-red-600" title="Slett">
+                  <button onClick={() => setDeleteId(img.id!)} className="text-red-400 hover:text-red-600" title="Slett">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
@@ -167,6 +173,63 @@ export default function FileManager({ onSelect }: { onSelect?: (url: string) => 
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Custom Upload Dialog */}
+      {uploadPrompt && (
+        <div className="fixed inset-0 bg-black/60 z-[300] flex items-center justify-center p-4">
+          <div className="bg-white p-6 max-w-sm w-full shadow-2xl rounded-sm">
+            <h3 className="text-lg font-serif mb-4">Lagre bilde som</h3>
+            <input 
+              type="text" 
+              value={uploadPrompt.filename} 
+              onChange={e => setUploadPrompt({...uploadPrompt, filename: e.target.value})}
+              className="w-full border border-gray-300 p-2 text-sm mb-6 focus:outline-none focus:border-brand-dark"
+              disabled={uploading}
+              autoFocus
+            />
+            <div className="flex justify-end gap-3">
+              <button 
+                onClick={() => setUploadPrompt(null)}
+                className="px-4 py-2 text-xs font-semibold tracking-widest uppercase text-brand-muted hover:text-brand-dark"
+                disabled={uploading}
+              >
+                Avbryt
+              </button>
+              <button 
+                onClick={executeUpload}
+                className="px-4 py-2 text-xs font-semibold tracking-widest uppercase bg-brand-dark text-white hover:bg-black disabled:opacity-50"
+                disabled={uploading || !uploadPrompt.filename.trim()}
+              >
+                {uploading ? 'Laster opp...' : 'Lagre'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Delete Confirm Dialog */}
+      {deleteId && (
+        <div className="fixed inset-0 bg-black/60 z-[300] flex items-center justify-center p-4">
+          <div className="bg-white p-6 max-w-sm w-full shadow-2xl rounded-sm">
+            <h3 className="text-lg font-serif mb-4">Bekreft sletting</h3>
+            <p className="text-sm text-brand-muted mb-6">Er du sikker på at du vil slette dette bildet?</p>
+            <div className="flex justify-end gap-3">
+              <button 
+                onClick={() => setDeleteId(null)}
+                className="px-4 py-2 text-xs font-semibold tracking-widest uppercase text-brand-muted hover:text-brand-dark"
+              >
+                Avbryt
+              </button>
+              <button 
+                onClick={handleDelete}
+                className="px-4 py-2 text-xs font-semibold tracking-widest uppercase bg-red-600 text-white hover:bg-red-700"
+              >
+                Slett
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

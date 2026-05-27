@@ -63,7 +63,7 @@ export default function Refleksjoner() {
               <article key={article.id} className="bg-white border border-brand-sand flex flex-col md:flex-row items-stretch group overflow-hidden">
                 {article.imageUrl && (
                   <div className="w-full md:w-2/5 h-64 md:h-auto overflow-hidden bg-brand-sand">
-                    <img src={article.imageUrl} alt={article.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                    <img loading="lazy" src={article.imageUrl} alt={article.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
                   </div>
                 )}
                 <div className={`p-8 md:p-12 flex flex-col justify-center ${article.imageUrl ? 'md:w-3/5' : 'w-full'}`}>

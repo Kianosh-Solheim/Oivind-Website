@@ -77,7 +77,7 @@ export default function Home() {
           {/* Card 1 */}
           <div className="bg-brand-surface group cursor-pointer flex flex-col h-full border border-gray-100">
             <div className="h-56 xl:h-48 w-full overflow-hidden">
-              <img src="https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&q=80" alt="Romanar" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out" />
+              <img loading="lazy" src="https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&q=80" alt="Romanar" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out" />
             </div>
             <div className="p-8 flex flex-col flex-grow">
               <h3 className="text-sm font-sans tracking-widest font-semibold text-brand-dark mb-4">ROMANAR</h3>
@@ -93,7 +93,7 @@ export default function Home() {
           {/* Card 2 */}
           <div className="bg-brand-surface group cursor-pointer flex flex-col h-full border border-gray-100">
             <div className="h-56 xl:h-48 w-full overflow-hidden">
-              <img src="https://images.unsplash.com/photo-1455390582262-044cdead27d8?w=800&q=80" alt="Refleksjoner" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out" />
+              <img loading="lazy" src="https://images.unsplash.com/photo-1455390582262-044cdead27d8?w=800&q=80" alt="Refleksjoner" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out" />
             </div>
             <div className="p-8 flex flex-col flex-grow">
               <h3 className="text-sm font-sans tracking-widest font-semibold text-brand-dark mb-4">REFLEKSJONAR</h3>
@@ -109,7 +109,7 @@ export default function Home() {
           {/* Card 3 */}
           <div className="bg-brand-surface group cursor-pointer flex flex-col h-full border border-gray-100">
             <div className="h-56 xl:h-48 w-full overflow-hidden">
-              <img src="https://images.unsplash.com/photo-1510915361894-db8b60106cb1?w=800&q=80" alt="Musikk" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out" />
+              <img loading="lazy" src="https://images.unsplash.com/photo-1510915361894-db8b60106cb1?w=800&q=80" alt="Musikk" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out" />
             </div>
             <div className="p-8 flex flex-col flex-grow">
               <h3 className="text-sm font-sans tracking-widest font-semibold text-brand-dark mb-4">MUSIKK</h3>
@@ -125,7 +125,7 @@ export default function Home() {
           {/* Card 4 */}
           <div className="bg-brand-surface group cursor-pointer flex flex-col h-full border border-gray-100">
             <div className="h-56 xl:h-48 w-full overflow-hidden">
-              <img src="https://images.unsplash.com/photo-1439853949703-ff2200f56f34?w=800&q=80" alt="Foto & Natur" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out" />
+              <img loading="lazy" src="https://images.unsplash.com/photo-1439853949703-ff2200f56f34?w=800&q=80" alt="Foto & Natur" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out" />
             </div>
             <div className="p-8 flex flex-col flex-grow">
               <h3 className="text-sm font-sans tracking-widest font-semibold text-brand-dark mb-4">FOTO & NATUR</h3>
@@ -141,7 +141,7 @@ export default function Home() {
           {/* Card 5 */}
           <div className="bg-brand-surface group cursor-pointer flex flex-col h-full border border-gray-100">
             <div className="h-56 xl:h-48 w-full overflow-hidden">
-              <img src="https://images.unsplash.com/photo-1528459801416-a9e53bbf4e17?w=800&q=80" alt="Video" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out grayscale opacity-90" />
+              <img loading="lazy" src="https://images.unsplash.com/photo-1528459801416-a9e53bbf4e17?w=800&q=80" alt="Video" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out grayscale opacity-90" />
             </div>
             <div className="p-8 flex flex-col flex-grow">
               <h3 className="text-sm font-sans tracking-widest font-semibold text-brand-dark mb-4">VIDEO & OPPLESING</h3>

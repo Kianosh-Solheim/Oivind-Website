@@ -63,6 +63,7 @@ export default function Foto() {
           {images.map((image, index) => (
             <div key={index} className={`overflow-hidden group cursor-pointer relative bg-brand-sand ${image.className}`}>
               <img 
+                loading="lazy"
                 src={image.src} 
                 alt={image.alt} 
                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"

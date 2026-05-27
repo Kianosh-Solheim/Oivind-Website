@@ -77,7 +77,7 @@ export default function EnglishArticleView() {
         
         {article.imageUrl && (
           <div className="w-full h-[40vh] min-h-[300px] mb-12 overflow-hidden bg-brand-sand">
-            <img src={article.imageUrl} alt={article.title} className="w-full h-full object-cover" />
+            <img loading="lazy" src={article.imageUrl} alt={article.title} className="w-full h-full object-cover" />
           </div>
         )}
         

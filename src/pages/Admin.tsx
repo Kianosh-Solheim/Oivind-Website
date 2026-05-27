@@ -202,7 +202,7 @@ export default function Admin() {
           
           {articleForm.imageUrl ? (
             <div className="w-full h-[40vh] min-h-[300px] mb-12 bg-brand-sand overflow-hidden relative group rounded-md">
-              <img src={articleForm.imageUrl} alt="Cover" className="w-full h-full object-cover" />
+              <img loading="lazy" src={articleForm.imageUrl} alt="Cover" className="w-full h-full object-cover" />
               <button 
                 onClick={() => setArticleForm({...articleForm, imageUrl: ''})} 
                 className="absolute top-4 right-4 bg-black/60 text-white px-3 py-1.5 text-xs font-semibold tracking-widest uppercase rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
