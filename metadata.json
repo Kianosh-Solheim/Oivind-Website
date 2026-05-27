@@ -1,0 +1,6 @@
+{
+  "name": "Øivind H. Solheim - The Nordic Storyteller",
+  "description": "Personal website and portfolio for Øivind H. Solheim, featuring novels, reflections, music, photography, and video.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
