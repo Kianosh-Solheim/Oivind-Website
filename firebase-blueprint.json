@@ -1,0 +1,45 @@
+{
+  "entities": {
+    "article": {
+      "title": "Article",
+      "description": "An article or reflection (Refleksjoner) written by the author.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "excerpt": { "type": "string" },
+        "createdAt": { "type": "number", "description": "Timestamp" },
+        "updatedAt": { "type": "number", "description": "Timestamp" },
+        "published": { "type": "boolean" },
+        "authorId": { "type": "string" }
+      },
+      "required": ["title", "content", "createdAt", "updatedAt", "published", "authorId"]
+    },
+    "book": {
+      "title": "Book",
+      "description": "A book or novel (Romanar) written by the author.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "coverUrl": { "type": "string" },
+        "publishedYear": { "type": "number" },
+        "isbn": { "type": "string" },
+        "createdAt": { "type": "number", "description": "Timestamp" },
+        "updatedAt": { "type": "number", "description": "Timestamp" },
+        "authorId": { "type": "string" }
+      },
+      "required": ["title", "description", "publishedYear", "createdAt", "updatedAt", "authorId"]
+    }
+  },
+  "firestore": {
+    "articles": {
+      "schema": { "$ref": "#/entities/article" },
+      "description": "Collection of articles/reflections."
+    },
+    "books": {
+      "schema": { "$ref": "#/entities/book" },
+      "description": "Collection of books/novels."
+    }
+  }
+}

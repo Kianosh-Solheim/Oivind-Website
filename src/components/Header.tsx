@@ -14,7 +14,7 @@ export default function Header() {
         </Link>
       </div>
       
-      <nav className="flex flex-wrap gap-x-6 gap-y-3 text-xs md:text-sm font-semibold tracking-wider text-brand-dark">
+      <nav className="flex flex-wrap items-center gap-x-6 gap-y-3 text-xs md:text-sm font-semibold tracking-wider text-brand-dark">
         <Link to="/" className="text-brand-accent hover:text-brand-accent transition-colors">HEIM</Link>
         <Link to="/romanar" className="hover:text-brand-accent transition-colors">ROMANAR</Link>
         <Link to="/refleksjonar" className="hover:text-brand-accent transition-colors">REFLEKSJONAR</Link>
@@ -23,6 +23,12 @@ export default function Header() {
         <Link to="/video" className="hover:text-brand-accent transition-colors">VIDEO</Link>
         <Link to="/om-meg" className="hover:text-brand-accent transition-colors">OM MEG</Link>
         <Link to="/kontakt" className="hover:text-brand-accent transition-colors">KONTAKT</Link>
+        <div className="w-px h-4 bg-gray-300 mx-2 hidden xl:block"></div>
+        <div className="flex items-center gap-3">
+          <Link to="/" className="hover:text-brand-accent transition-colors">NO</Link>
+          <span className="text-gray-300">/</span>
+          <Link to="/English" className="hover:text-brand-accent transition-colors">EN</Link>
+        </div>
       </nav>
     </header>
   );

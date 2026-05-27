@@ -1,0 +1,102 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isSignedIn() { return request.auth != null; }
+    
+    // For a portfolio, user can just write if they are the first user, or their email matches a hardcoded env. We'll use the email check.
+    // Or we let anyone with a specific email be admin.
+    function isAdmin() { 
+      return isSignedIn() && request.auth.token.email == 'kianoshsolheim@gmail.com' && request.auth.token.email_verified == true;
+    }
+    
+    function isValidArticle(data) {
+      return data.keys().hasAll(['title', 'content', 'createdAt', 'updatedAt', 'published', 'authorId']) &&
+             data.keys().size() >= 6 &&
+             data.title is string && data.title.size() <= 200 && data.title.size() > 0 &&
+             data.content is string && data.content.size() <= 100000 &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp &&
+             data.published is bool &&
+             data.authorId is string && data.authorId == request.auth.uid &&
+             (!('language' in data) || (data.language is string && data.language.size() <= 10)) &&
+             (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 2000)) &&
+             (!('slug' in data) || (data.slug is string && data.slug.size() <= 200));
+    }
+
+    match /articles/{articleId} {
+      allow get: if resource.data.published == true || isAdmin();
+      allow list: if resource.data.published == true || isAdmin();
+      
+      allow create: if isSignedIn() && isAdmin() &&
+                    isValidId(articleId) &&
+                    isValidArticle(incoming()) &&
+                    incoming().createdAt == request.time &&
+                    incoming().updatedAt == request.time;
+                    
+      allow update: if isSignedIn() && isAdmin() &&
+                    isValidId(articleId) &&
+                    isValidArticle(incoming()) &&
+                    incoming().authorId == existing().authorId &&
+                    incoming().createdAt == existing().createdAt &&
+                    incoming().updatedAt == request.time;
+                    
+      allow delete: if isSignedIn() && isAdmin() && isValidId(articleId);
+    }
+    
+    function isValidBook(data) {
+      return data.keys().hasAll(['title', 'description', 'publishedYear', 'createdAt', 'updatedAt', 'authorId']) &&
+             data.title is string && data.title.size() <= 200 && data.title.size() > 0 &&
+             data.description is string && data.description.size() <= 10000 &&
+             data.publishedYear is number &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp &&
+             data.authorId is string && data.authorId == request.auth.uid;
+    }
+
+    match /books/{bookId} {
+      allow get: if resource.data.authorId != '' || isAdmin();
+      allow list: if resource.data.authorId != '' || isAdmin();
+      
+      allow create: if isSignedIn() && isAdmin() &&
+                    isValidId(bookId) &&
+                    isValidBook(incoming()) &&
+                    incoming().createdAt == request.time &&
+                    incoming().updatedAt == request.time;
+                    
+      allow update: if isSignedIn() && isAdmin() &&
+                    isValidId(bookId) &&
+                    isValidBook(incoming()) &&
+                    incoming().authorId == existing().authorId &&
+                    incoming().createdAt == existing().createdAt &&
+                    incoming().updatedAt == request.time;
+                    
+      allow delete: if isSignedIn() && isAdmin() && isValidId(bookId);
+    }
+    function isValidImageAsset(data) {
+      return data.keys().hasAll(['filename', 'url', 'createdAt', 'authorId']) &&
+             data.filename is string && data.filename.size() <= 200 && data.filename.size() > 0 &&
+             data.url is string && data.url.size() <= 1000000 &&
+             data.createdAt is timestamp &&
+             data.authorId is string && data.authorId == request.auth.uid;
+    }
+
+    match /images/{imageId} {
+      allow get: if true;
+      allow list: if true;
+      
+      allow create: if isSignedIn() && isAdmin() &&
+                    isValidId(imageId) &&
+                    isValidImageAsset(incoming()) &&
+                    incoming().createdAt == request.time;
+                    
+      allow delete: if isSignedIn() && isAdmin() && isValidId(imageId);
+    }
+  }
+}

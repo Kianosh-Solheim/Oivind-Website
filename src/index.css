@@ -17,3 +17,19 @@
 body {
   @apply font-sans text-brand-dark bg-white antialiased;
 }
+
+/* Rich Text Styles */
+.tiptap p.is-editor-empty:first-child::before {
+  color: #adb5bd;
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+.prose p { margin-bottom: 1.5em; }
+.prose h2 { font-size: 1.75rem; font-family: var(--font-serif); margin-top: 2em; margin-bottom: 0.75em; color: var(--color-brand-dark); font-weight: 500; }
+.prose blockquote { border-left: 4px solid var(--color-brand-accent); padding-left: 1.25rem; font-style: italic; margin-top: 2em; margin-bottom: 2em; color: rgba(34, 34, 34, 0.75); }
+.prose a { color: var(--color-brand-accent); text-decoration: underline; text-underline-offset: 4px; }
+.prose a:hover { color: var(--color-brand-dark); }
+.prose img { max-width: 100%; height: auto; border-radius: 0.25rem; margin-top: 2em; margin-bottom: 2em; }
+
