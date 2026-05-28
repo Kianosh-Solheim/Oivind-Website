@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import { db } from '../lib/firebase';
 import { collection, getDocs, query, where, documentId } from 'firebase/firestore';
 import { isHtml, calculateReadingTime } from '../lib/utils';
+import { useLanguage } from '../context/LanguageContext';
 
 interface Article {
   id: string;
@@ -20,6 +21,7 @@ export default function RefleksjonView() {
   const { slug } = useParams();
   const [article, setArticle] = useState<Article | null>(null);
   const [loading, setLoading] = useState(true);
+  const { t, language } = useLanguage();
 
   useEffect(() => {
     const fetchArticle = async () => {
@@ -50,7 +52,7 @@ export default function RefleksjonView() {
   if (loading) {
     return (
       <div className="bg-brand-surface min-h-screen py-32 text-center text-brand-muted">
-        Laster inn refleksjonen...
+        {language === 'en' ? 'Loading reflection...' : 'Laster inn refleksjonen...'}
       </div>
     );
   }
@@ -58,9 +60,9 @@ export default function RefleksjonView() {
   if (!article) {
     return (
       <div className="bg-brand-surface min-h-screen py-32 text-center">
-        <h1 className="text-3xl font-serif text-brand-dark mb-4">Fann ikkje refleksjonen</h1>
+        <h1 className="text-3xl font-serif text-brand-dark mb-4">{language === 'en' ? 'Reflection not found' : 'Fann ikkje refleksjonen'}</h1>
         <Link to="/refleksjonar" className="text-brand-accent hover:text-brand-dark transition-colors uppercase tracking-widest text-xs font-semibold">
-          TILBAKE TIL REFLEKSJONAR
+          {language === 'en' ? 'BACK TO REFLECTIONS' : 'TILBAKE TIL REFLEKSJONAR'}
         </Link>
       </div>
     );
@@ -70,7 +72,7 @@ export default function RefleksjonView() {
     <div className="bg-brand-surface min-h-screen">
       <section className="py-20 md:py-32 px-6 md:px-12 max-w-3xl mx-auto">
         <Link to="/refleksjonar" className="inline-flex items-center text-brand-muted hover:text-brand-dark transition-colors font-sans text-xs font-semibold tracking-widest uppercase mb-12">
-          <ArrowLeft className="mr-2 w-4 h-4" /> ALLE REFLEKSJONAR
+          <ArrowLeft className="mr-2 w-4 h-4" /> {t('ALL_REFLECTIONS')}
         </Link>
         <div className="flex items-center gap-4 mb-4">
           <span className="text-xs text-brand-muted uppercase tracking-widest font-semibold">
