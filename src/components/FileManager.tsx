@@ -131,7 +131,7 @@ export default function FileManager({ onSelect }: { onSelect?: (url: string, cap
     
     const accessKey = import.meta.env.VITE_UNSPLASH_ACCESS_KEY;
     if (!accessKey) {
-      alert('VITE_UNSPLASH_ACCESS_KEY is not configured in the environment.');
+      alert('VITE_UNSPLASH_ACCESS_KEY er ikkje konfigurert i miljøvariablane.');
       return;
     }
     
@@ -146,7 +146,7 @@ export default function FileManager({ onSelect }: { onSelect?: (url: string, cap
       setUnsplashImages(data.results || []);
     } catch (err) {
       console.error(err);
-      alert('Failed to fetch from Unsplash.');
+      alert('Kunne ikkje hente bilete frå Unsplash.');
     } finally {
       setUnsplashLoading(false);
     }
