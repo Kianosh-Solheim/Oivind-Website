@@ -3,7 +3,7 @@ import { ArrowLeft } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { db } from '../lib/firebase';
 import { collection, getDocs, query, where, documentId } from 'firebase/firestore';
-import { isHtml } from '../lib/utils';
+import { isHtml, calculateReadingTime } from '../lib/utils';
 
 interface Article {
   id: string;
@@ -13,6 +13,7 @@ interface Article {
   language?: string;
   slug?: string;
   imageUrl?: string;
+  imageCaption?: string;
 }
 
 export default function EnglishArticleView() {
@@ -71,23 +72,39 @@ export default function EnglishArticleView() {
         <Link to="/English" className="inline-flex items-center text-brand-muted hover:text-brand-dark transition-colors font-sans text-xs font-semibold tracking-widest uppercase mb-12">
           <ArrowLeft className="mr-2 w-4 h-4" /> ALL ARTICLES
         </Link>
+        <div className="flex items-center gap-4 mb-4">
+          <span className="text-xs text-brand-muted uppercase tracking-widest font-semibold">
+            {calculateReadingTime(article.content)} min read
+          </span>
+        </div>
         <h1 className="text-4xl md:text-5xl lg:text-6xl font-serif text-brand-dark leading-tight mb-12">
           {article.title}
         </h1>
         
         {article.imageUrl && (
-          <div className="w-full h-[40vh] min-h-[300px] mb-12 overflow-hidden bg-brand-sand">
-            <img loading="lazy" src={article.imageUrl} alt={article.title} className="w-full h-full object-cover" />
-          </div>
+          <figure className="mb-12">
+            <div className="w-full h-[40vh] min-h-[300px] overflow-hidden bg-brand-sand">
+              <img loading="lazy" src={article.imageUrl} alt={article.title} className="w-full h-full object-cover" />
+            </div>
+            {article.imageCaption && (
+              <figcaption className="text-center text-sm text-brand-muted mt-3 italic">
+                {article.imageCaption}
+              </figcaption>
+            )}
+          </figure>
         )}
         
         <div className="bg-white p-8 md:p-12 lg:p-16 border border-brand-sand shadow-sm">
-          <div 
-            className={`prose prose-brand max-w-none text-brand-dark/90 font-serif leading-relaxed text-lg ${!isHtml(article.content) ? 'whitespace-pre-wrap' : ''}`}
-            dangerouslySetInnerHTML={isHtml(article.content) ? { __html: article.content } : undefined}
-          >
-            {!isHtml(article.content) && article.content}
-          </div>
+          {isHtml(article.content) ? (
+            <div 
+              className="prose prose-brand max-w-none text-brand-dark/90 font-serif leading-relaxed text-lg"
+              dangerouslySetInnerHTML={{ __html: article.content }}
+            />
+          ) : (
+            <div className="prose prose-brand max-w-none text-brand-dark/90 font-serif leading-relaxed text-lg whitespace-pre-wrap">
+              {article.content}
+            </div>
+          )}
         </div>
       </section>
     </div>

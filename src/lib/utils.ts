@@ -8,3 +8,11 @@ export function stripHtml(html: string) {
   tmp.innerHTML = html;
   return tmp.textContent || tmp.innerText || "";
 }
+
+export function calculateReadingTime(text: string): number {
+  if (!text) return 1;
+  const plainText = stripHtml(text);
+  // Matches words (alphanumeric and some punctuation correctly, but split by space is easiest)
+  const words = plainText.trim().split(/\s+/).length;
+  return Math.max(1, Math.ceil(words / 200));
+}

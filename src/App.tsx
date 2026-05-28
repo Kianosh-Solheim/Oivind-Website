@@ -21,7 +21,7 @@ export default function App() {
             <Route path="/foto" element={<Foto />} />
             <Route path="/refleksjonar" element={<Refleksjoner />} />
             <Route path="/refleksjonar/:slug" element={<RefleksjonView />} />
-            <Route path="/romanar" element={<Romanar />} />
+            <Route path="/boker" element={<Romanar />} />
             <Route path="/admin" element={<Admin />} />
             <Route path="/English" element={<EnglishArticles />} />
             <Route path="/English/:slug" element={<EnglishArticleView />} />

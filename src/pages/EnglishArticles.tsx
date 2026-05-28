@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Plus } from 'lucide-react';
+import { ArrowLeft, Plus, Edit } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { db } from '../lib/firebase';
 import { collection, getDocs, query, where } from 'firebase/firestore';
-import { stripHtml } from '../lib/utils';
+import { stripHtml, calculateReadingTime } from '../lib/utils';
 import { useAuth } from '../lib/AuthContext';
 
 interface Article {
@@ -73,13 +73,25 @@ export default function EnglishArticles() {
         ) : (
           <div className="grid md:grid-cols-2 gap-8">
             {articles.map((article) => (
-              <article key={article.id} className="bg-white border border-brand-sand flex flex-col h-full hover:-translate-y-1 transition-transform duration-300 overflow-hidden group">
+              <article key={article.id} className="relative bg-white border border-brand-sand flex flex-col h-full hover:-translate-y-1 transition-transform duration-300 overflow-hidden group">
+                {isAdmin && (
+                  <button 
+                    onClick={(e) => { e.preventDefault(); navigate(`/admin?edit=${article.id}`); }}
+                    className="absolute bottom-4 left-4 p-2 bg-white/90 rounded-full shadow-sm text-brand-dark opacity-0 group-hover:opacity-100 transition-opacity z-10 hover:bg-gray-100 hover:scale-110"
+                    title="Edit Article"
+                  >
+                    <Edit className="w-4 h-4" />
+                  </button>
+                )}
                 {article.imageUrl && (
                   <div className="w-full h-48 md:h-64 overflow-hidden bg-brand-sand">
                     <img loading="lazy" src={article.imageUrl} alt={article.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
                   </div>
                 )}
                 <div className="p-8 md:p-12 flex flex-col flex-grow w-full">
+                  <div className="text-xs text-brand-muted uppercase tracking-widest font-semibold mb-3">
+                    {calculateReadingTime(article.content)} min read
+                  </div>
                   <h2 className="text-3xl font-serif text-brand-dark mb-4">{article.title}</h2>
                   <div className="text-brand-dark/80 font-serif leading-relaxed mb-8 flex-grow line-clamp-4">
                     {stripHtml(article.content)}

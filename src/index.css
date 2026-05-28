@@ -32,4 +32,5 @@ body {
 .prose a { color: var(--color-brand-accent); text-decoration: underline; text-underline-offset: 4px; }
 .prose a:hover { color: var(--color-brand-dark); }
 .prose img { max-width: 100%; height: auto; border-radius: 0.25rem; margin-top: 2em; margin-bottom: 2em; }
+.prose figure img { margin: 0; }
 

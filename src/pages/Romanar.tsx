@@ -37,7 +37,7 @@ export default function Romanar() {
           <ArrowLeft className="mr-2 w-4 h-4" /> TILBAKE TIL HEIM
         </Link>
         <h1 className="text-5xl md:text-6xl font-serif text-brand-dark leading-tight mb-6">
-          Romanar
+          Bøker
         </h1>
         <div className="w-16 h-px bg-brand-accent mx-auto mb-8"></div>
         <p className="text-lg md:text-xl text-brand-dark/80 font-sans leading-relaxed">

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../lib/AuthContext';
 import { db } from '../lib/firebase';
 import { collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, query, orderBy } from 'firebase/firestore';
-import { Image as ImageIcon, Trash2, Copy, Plus } from 'lucide-react';
+import { Image as ImageIcon, Trash2, Copy, Plus, Search } from 'lucide-react';
 
 export interface ImageFile {
   id?: string;
@@ -11,10 +11,15 @@ export interface ImageFile {
   createdAt?: any;
 }
 
-export default function FileManager({ onSelect }: { onSelect?: (url: string) => void }) {
+export default function FileManager({ onSelect }: { onSelect?: (url: string, caption?: string) => void }) {
   const { user } = useAuth();
   const [images, setImages] = useState<ImageFile[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  const [activeTab, setActiveTab] = useState<'my-images' | 'unsplash'>('my-images');
+  const [unsplashQuery, setUnsplashQuery] = useState('');
+  const [unsplashImages, setUnsplashImages] = useState<any[]>([]);
+  const [unsplashLoading, setUnsplashLoading] = useState(false);
   
   // Custom dialog states to replace window.*
   const [uploadPrompt, setUploadPrompt] = useState<{file: File, filename: string} | null>(null);
@@ -118,63 +123,159 @@ export default function FileManager({ onSelect }: { onSelect?: (url: string) => 
 
   const copyToClipboard = (url: string) => {
     navigator.clipboard.writeText(url).catch(console.error);
-    // Silent copy instead of alert
+  };
+  
+  const searchUnsplash = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!unsplashQuery.trim()) return;
+    
+    const accessKey = import.meta.env.VITE_UNSPLASH_ACCESS_KEY;
+    if (!accessKey) {
+      alert('VITE_UNSPLASH_ACCESS_KEY is not configured in the environment.');
+      return;
+    }
+    
+    setUnsplashLoading(true);
+    try {
+      const res = await fetch(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(unsplashQuery)}&per_page=20`, {
+        headers: {
+          'Authorization': `Client-ID ${accessKey}`
+        }
+      });
+      const data = await res.json();
+      setUnsplashImages(data.results || []);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to fetch from Unsplash.');
+    } finally {
+      setUnsplashLoading(false);
+    }
   };
 
   return (
-    <div className="bg-brand-surface border border-gray-100 p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-serif">File Manager</h2>
+    <div className="bg-brand-surface border border-gray-100 p-6 flex flex-col h-full">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 gap-4">
+        <div className="flex items-center gap-6 border-b border-gray-200">
+          <button 
+            className={`pb-2 text-sm font-semibold tracking-widest uppercase transition-colors ${activeTab === 'my-images' ? 'text-brand-dark border-b-2 border-brand-dark' : 'text-brand-muted hover:text-brand-dark border-b-2 border-transparent'}`}
+            onClick={() => setActiveTab('my-images')}
+          >
+            Mine Bilde
+          </button>
+          <button 
+            className={`pb-2 text-sm font-semibold tracking-widest uppercase transition-colors ${activeTab === 'unsplash' ? 'text-brand-dark border-b-2 border-brand-dark' : 'text-brand-muted hover:text-brand-dark border-b-2 border-transparent'}`}
+            onClick={() => setActiveTab('unsplash')}
+          >
+            Unsplash
+          </button>
+        </div>
         
-        <label className="cursor-pointer bg-brand-dark text-white px-4 py-2 text-xs font-semibold tracking-widest uppercase hover:bg-black transition-colors flex items-center">
-          <Plus className="w-4 h-4 mr-2" /> 
-          Last opp bilde
-          <input 
-            type="file" 
-            accept="image/*" 
-            className="hidden" 
-            ref={fileInputRef}
-            onChange={handleFileSelect} 
-          />
-        </label>
+        {activeTab === 'my-images' && (
+          <label className="cursor-pointer bg-brand-dark text-white px-4 py-2 text-xs font-semibold tracking-widest uppercase hover:bg-black transition-colors flex items-center shrink-0">
+            <Plus className="w-4 h-4 mr-2" /> 
+            Last opp bilde
+            <input 
+              type="file" 
+              accept="image/*" 
+              className="hidden" 
+              ref={fileInputRef}
+              onChange={handleFileSelect} 
+            />
+          </label>
+        )}
       </div>
 
-      {loading ? (
-        <div className="text-brand-muted text-sm py-4">Laster bilder...</div>
-      ) : images.length === 0 ? (
-        <div className="text-brand-muted text-sm py-8 text-center bg-white border border-dashed border-gray-300">Ingen bilder lastet opp.</div>
-      ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {images.map(img => (
-            <div key={img.id} className="bg-white border border-gray-100 flex flex-col group relative overflow-hidden">
-              <div 
-                className="w-full h-32 bg-gray-50 flex items-center justify-center overflow-hidden cursor-pointer"
-                onClick={() => onSelect && onSelect(img.url)}
-              >
-                <img loading="lazy" src={img.url} alt={img.filename} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+      <div className="flex-grow overflow-y-auto">
+        {activeTab === 'my-images' && (
+          <>
+            {loading ? (
+              <div className="text-brand-muted text-sm py-4">Lastar bilde...</div>
+            ) : images.length === 0 ? (
+              <div className="text-brand-muted text-sm py-8 text-center bg-white border border-dashed border-gray-300">Ingen bilde lasta opp.</div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                {images.map(img => (
+                  <div key={img.id} className="bg-white border border-gray-100 flex flex-col group relative overflow-hidden">
+                    <div 
+                      className="w-full h-32 bg-gray-50 flex items-center justify-center overflow-hidden cursor-pointer"
+                      onClick={() => onSelect && onSelect(img.url)}
+                    >
+                      <img loading="lazy" src={img.url} alt={img.filename} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                    </div>
+                    <div className="p-3 flex justify-between items-center border-t border-gray-50 bg-white z-10">
+                      <span className="text-xs font-semibold truncate max-w-[120px]" title={img.filename}>{img.filename}</span>
+                      <div className="flex gap-2">
+                        <button onClick={() => copyToClipboard(img.url)} className="text-brand-muted hover:text-brand-dark" title="Kopier URL">
+                          <Copy className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => setDeleteId(img.id!)} className="text-red-400 hover:text-red-600" title="Slett">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                    {onSelect && (
+                       <div 
+                         className="absolute inset-0 bg-brand-accent/10 opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer transition-opacity pointer-events-none"
+                       >
+                         <span className="bg-white px-3 py-1.5 text-xs font-bold tracking-widest text-brand-dark shadow-sm">VEL</span>
+                       </div>
+                    )}
+                  </div>
+                ))}
               </div>
-              <div className="p-3 flex justify-between items-center border-t border-gray-50 bg-white z-10">
-                <span className="text-xs font-semibold truncate max-w-[120px]" title={img.filename}>{img.filename}</span>
-                <div className="flex gap-2">
-                  <button onClick={() => copyToClipboard(img.url)} className="text-brand-muted hover:text-brand-dark" title="Kopier URL">
-                    <Copy className="w-4 h-4" />
-                  </button>
-                  <button onClick={() => setDeleteId(img.id!)} className="text-red-400 hover:text-red-600" title="Slett">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+            )}
+          </>
+        )}
+
+        {activeTab === 'unsplash' && (
+          <div className="flex flex-col h-full gap-6">
+            <form onSubmit={searchUnsplash} className="flex gap-2 relative">
+              <input 
+                type="text" 
+                placeholder="Søk på Unsplash (t.d. natur, minimalistisk...)"
+                value={unsplashQuery}
+                onChange={e => setUnsplashQuery(e.target.value)}
+                className="flex-grow p-3 text-sm border-none ring-1 ring-gray-200 focus:ring-brand-accent bg-white outline-none pl-10"
+              />
+              <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+              <button type="submit" className="px-6 py-3 bg-brand-dark text-white text-xs font-semibold tracking-widest uppercase hover:bg-black transition-colors" disabled={unsplashLoading}>
+                {unsplashLoading ? 'Søkjer...' : 'Søk'}
+              </button>
+            </form>
+            
+            {!import.meta.env.VITE_UNSPLASH_ACCESS_KEY && (
+              <div className="p-4 bg-orange-50 border border-orange-100 text-orange-800 text-sm">
+                VITE_UNSPLASH_ACCESS_KEY er ikkje konfigurert i miljøvariablane. Opprett ein API-nøkkel på Unsplash Developer-plattforma for å bruke denne funksjonen.
+              </div>
+            )}
+
+            <div className="columns-2 md:columns-3 lg:columns-4 gap-4 pb-4 space-y-4">
+              {unsplashImages.map(img => (
+                <div key={img.id} className="break-inside-avoid bg-white border border-gray-100 flex flex-col group relative overflow-hidden cursor-pointer" onClick={() => {
+                  const captionStr = `Bilde av ${img.user?.name} på Unsplash`;
+                  onSelect && onSelect(img.urls.regular, captionStr);
+                }}>
+                  <div className="w-full bg-gray-50 flex items-center justify-center overflow-hidden">
+                    <img loading="lazy" src={img.urls.small} alt={img.alt_description || 'Unsplash image'} className="w-full h-auto block object-cover group-hover:scale-105 transition-transform duration-500" />
+                  </div>
+                  <div className="p-3 border-t border-gray-50 bg-white z-10 relative">
+                    <span className="text-[10px] text-brand-muted truncate block">Av {img.user?.name}</span>
+                  </div>
+                  {onSelect && (
+                     <div 
+                       className="absolute inset-0 bg-brand-accent/10 opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer transition-opacity pointer-events-none z-20"
+                     >
+                       <span className="bg-white px-3 py-1.5 text-xs font-bold tracking-widest text-brand-dark shadow-sm text-center">
+                         VEL<br/><span className="text-[9px] font-normal lowercase tracking-normal">med kreditering</span>
+                       </span>
+                     </div>
+                  )}
                 </div>
-              </div>
-              {onSelect && (
-                 <div 
-                   className="absolute inset-0 bg-brand-accent/10 opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer transition-opacity pointer-events-none"
-                 >
-                   <span className="bg-white px-3 py-1.5 text-xs font-bold tracking-widest text-brand-dark shadow-sm">VELG</span>
-                 </div>
-              )}
+              ))}
             </div>
-          ))}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
 
       {/* Custom Upload Dialog */}
       {uploadPrompt && (
