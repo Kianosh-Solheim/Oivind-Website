@@ -27,6 +27,14 @@ interface Book {
   title: string;
   description: string;
   publishedYear: number;
+  coverImageUrl?: string;
+  isbn?: string;
+  buyLink?: string;
+  pageCount?: number;
+  language?: 'no' | 'en' | 'both';
+  titleEn?: string;
+  descriptionEn?: string;
+  buyLinkEn?: string;
 }
 
 export default function Admin() {
@@ -39,19 +47,25 @@ export default function Admin() {
   
   const [isComposing, setIsComposing] = useState(false);
   const [showImagePicker, setShowImagePicker] = useState(false);
+  const [showBookImagePicker, setShowBookImagePicker] = useState(false);
   const [editingArticleId, setEditingArticleId] = useState<string | null>(null);
   const [articleFilter, setArticleFilter] = useState('all');
   const [articleForm, setArticleForm] = useState({ title: '', content: '', published: true, language: 'no', slug: '', imageUrl: '', imageCaption: '', translationId: '' });
   const [infoDialog, setInfoDialog] = useState<{title: string, content: React.ReactNode} | null>(null);
   const [dashboardTab, setDashboardTab] = useState<'articles' | 'books' | 'files'>('articles');
   
-  const [bookForm, setBookForm] = useState({ title: '', description: '', publishedYear: new Date().getFullYear() });
+  const [bookForm, setBookForm] = useState<Book>({ title: '', description: '', publishedYear: new Date().getFullYear(), coverImageUrl: '', isbn: '', buyLink: '', pageCount: 0, language: 'no', titleEn: '', descriptionEn: '', buyLinkEn: '' });
 
   useEffect(() => {
     if (user) {
       loadData();
       
       const params = new URLSearchParams(location.search);
+      const tabParam = params.get('tab');
+      if (tabParam === 'books' || tabParam === 'files' || tabParam === 'articles') {
+        setDashboardTab(tabParam);
+      }
+      
       if (params.get('compose') === 'true') {
         const lang = params.get('lang') || 'no';
         setEditingArticleId(null);
@@ -156,7 +170,7 @@ export default function Admin() {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });
-      setBookForm({ title: '', description: '', publishedYear: new Date().getFullYear() });
+      setBookForm({ title: '', description: '', publishedYear: new Date().getFullYear(), coverImageUrl: '', isbn: '', buyLink: '', pageCount: 0, language: 'no', titleEn: '', descriptionEn: '', buyLinkEn: '' });
       loadData();
     } catch (e) {
       console.error("Error adding book", e);
@@ -591,17 +605,92 @@ export default function Admin() {
             </div>
             
             <form onSubmit={addBook} className="space-y-4 mb-8 bg-white border border-gray-100 p-5 md:p-6 shadow-sm">
+              {bookForm.coverImageUrl ? (
+                <div className="relative w-32 h-48 bg-gray-100 mx-auto rounded overflow-hidden group">
+                  <img src={bookForm.coverImageUrl} className="w-full h-full object-cover" alt="Omslag" />
+                  <button type="button" onClick={() => setBookForm({...bookForm, coverImageUrl: ''})} className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">Fjern</button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => setShowBookImagePicker(true)} className="w-full py-4 border border-dashed border-gray-300 text-sm font-semibold text-brand-muted tracking-widest hover:bg-gray-50 uppercase">Legg til omslag</button>
+              )}
+              
+              <select 
+                value={bookForm.language || 'no'}
+                onChange={e => setBookForm({...bookForm, language: e.target.value as any})}
+                className="w-full p-3 text-sm border border-gray-200 focus:border-brand-accent focus:ring-1 focus:ring-brand-accent bg-white outline-none transition-colors"
+              >
+                <option value="no">Norsk</option>
+                <option value="en">Engelsk</option>
+                <option value="both">Begge (Norsk og Engelsk)</option>
+              </select>
+
+              {(bookForm.language === 'no' || bookForm.language === 'both') && (
+                <div className="space-y-4">
+                  <h3 className="text-xs font-semibold uppercase tracking-widest text-brand-muted">Norsk innhold</h3>
+                  <input 
+                    type="text" placeholder="Tittel (Norsk)" required
+                    value={bookForm.title} onChange={e => setBookForm({...bookForm, title: e.target.value})}
+                    className="w-full p-3 text-sm border border-gray-200 focus:border-brand-accent focus:ring-1 focus:ring-brand-accent bg-white outline-none transition-colors" />
+                  <textarea 
+                    placeholder="Skildring (Norsk)" required rows={3}
+                    value={bookForm.description} onChange={e => setBookForm({...bookForm, description: e.target.value})}
+                    className="w-full p-3 text-sm border border-gray-200 focus:border-brand-accent focus:ring-1 focus:ring-brand-accent bg-white outline-none transition-colors resize-y min-h-[80px]"></textarea>
+                  <input 
+                    type="url" placeholder="Kjøpslenkje (Norsk - valfritt)"
+                    value={bookForm.buyLink || ''} onChange={e => setBookForm({...bookForm, buyLink: e.target.value})}
+                    className="w-full p-3 text-sm border border-gray-200 focus:border-brand-accent focus:ring-1 focus:ring-brand-accent bg-white outline-none transition-colors" />
+                </div>
+              )}
+
+              {bookForm.language === 'en' && (
+                <div className="space-y-4">
+                  <h3 className="text-xs font-semibold uppercase tracking-widest text-brand-muted">English content</h3>
+                  <input 
+                    type="text" placeholder="Title (English)" required
+                    value={bookForm.title} onChange={e => setBookForm({...bookForm, title: e.target.value})}
+                    className="w-full p-3 text-sm border border-gray-200 focus:border-brand-accent focus:ring-1 focus:ring-brand-accent bg-white outline-none transition-colors" />
+                  <textarea 
+                    placeholder="Description (English)" required rows={3}
+                    value={bookForm.description} onChange={e => setBookForm({...bookForm, description: e.target.value})}
+                    className="w-full p-3 text-sm border border-gray-200 focus:border-brand-accent focus:ring-1 focus:ring-brand-accent bg-white outline-none transition-colors resize-y min-h-[80px]"></textarea>
+                  <input 
+                    type="url" placeholder="Buy link (English - optional)"
+                    value={bookForm.buyLink || ''} onChange={e => setBookForm({...bookForm, buyLink: e.target.value})}
+                    className="w-full p-3 text-sm border border-gray-200 focus:border-brand-accent focus:ring-1 focus:ring-brand-accent bg-white outline-none transition-colors" />
+                </div>
+              )}
+
+              {bookForm.language === 'both' && (
+                <div className="space-y-4 pt-4 border-t border-gray-100 mt-4">
+                  <h3 className="text-xs font-semibold uppercase tracking-widest text-brand-muted">Engelsk innhold</h3>
+                  <input 
+                    type="text" placeholder="Tittel (Engelsk)" required
+                    value={bookForm.titleEn || ''} onChange={e => setBookForm({...bookForm, titleEn: e.target.value})}
+                    className="w-full p-3 text-sm border border-gray-200 focus:border-brand-accent focus:ring-1 focus:ring-brand-accent bg-white outline-none transition-colors" />
+                  <textarea 
+                    placeholder="Skildring (Engelsk)" required rows={3}
+                    value={bookForm.descriptionEn || ''} onChange={e => setBookForm({...bookForm, descriptionEn: e.target.value})}
+                    className="w-full p-3 text-sm border border-gray-200 focus:border-brand-accent focus:ring-1 focus:ring-brand-accent bg-white outline-none transition-colors resize-y min-h-[80px]"></textarea>
+                  <input 
+                    type="url" placeholder="Kjøpslenkje (Engelsk - valfritt)"
+                    value={bookForm.buyLinkEn || ''} onChange={e => setBookForm({...bookForm, buyLinkEn: e.target.value})}
+                    className="w-full p-3 text-sm border border-gray-200 focus:border-brand-accent focus:ring-1 focus:ring-brand-accent bg-white outline-none transition-colors" />
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4 mt-4 pt-4 border-t border-gray-100">
+                <input 
+                  type="number" placeholder="Utgjevingsår" required
+                  value={bookForm.publishedYear || ''} onChange={e => setBookForm({...bookForm, publishedYear: parseInt(e.target.value) || 0})}
+                  className="w-full p-3 text-sm border border-gray-200 focus:border-brand-accent focus:ring-1 focus:ring-brand-accent bg-white outline-none transition-colors" />
+                <input 
+                  type="number" placeholder="Sidetal (valfritt)"
+                  value={bookForm.pageCount || ''} onChange={e => setBookForm({...bookForm, pageCount: parseInt(e.target.value) || 0})}
+                  className="w-full p-3 text-sm border border-gray-200 focus:border-brand-accent focus:ring-1 focus:ring-brand-accent bg-white outline-none transition-colors" />
+              </div>
               <input 
-                type="text" placeholder="Tittel" required
-                value={bookForm.title} onChange={e => setBookForm({...bookForm, title: e.target.value})}
-                className="w-full p-3 text-sm border border-gray-200 focus:border-brand-accent focus:ring-1 focus:ring-brand-accent bg-white outline-none transition-colors" />
-              <textarea 
-                placeholder="Skildring" required rows={3}
-                value={bookForm.description} onChange={e => setBookForm({...bookForm, description: e.target.value})}
-                className="w-full p-3 text-sm border border-gray-200 focus:border-brand-accent focus:ring-1 focus:ring-brand-accent bg-white outline-none transition-colors resize-y min-h-[80px]"></textarea>
-              <input 
-                type="number" placeholder="År" required
-                value={bookForm.publishedYear} onChange={e => setBookForm({...bookForm, publishedYear: parseInt(e.target.value)})}
+                type="text" placeholder="ISBN (valfritt)"
+                value={bookForm.isbn || ''} onChange={e => setBookForm({...bookForm, isbn: e.target.value})}
                 className="w-full p-3 text-sm border border-gray-200 focus:border-brand-accent focus:ring-1 focus:ring-brand-accent bg-white outline-none transition-colors" />
               <button type="submit" className="w-full py-3 bg-brand-dark text-white uppercase tracking-widest font-semibold text-xs mt-2 hover:bg-black transition-colors">LEGG TIL BOK</button>
             </form>
@@ -643,6 +732,16 @@ export default function Admin() {
             </div>
             <FileManager />
           </div>
+          )}
+
+          {showBookImagePicker && (
+            <ImagePickerModal 
+              onClose={() => setShowBookImagePicker(false)} 
+              onSelect={(url) => {
+                setBookForm({...bookForm, coverImageUrl: url});
+                setShowBookImagePicker(false);
+              }}
+            />
           )}
         </main>
       </div>

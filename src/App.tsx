@@ -7,6 +7,7 @@ import Refleksjoner from './pages/Refleksjoner';
 import RefleksjonView from './pages/RefleksjonView';
 import Romanar from './pages/Romanar';
 import Admin from './pages/Admin';
+import Dagbok from './pages/Dagbok';
 import { LanguageProvider } from './context/LanguageContext';
 
 export default function App() {
@@ -21,6 +22,7 @@ export default function App() {
               <Route path="/foto" element={<Foto />} />
               <Route path="/refleksjonar" element={<Refleksjoner />} />
               <Route path="/refleksjonar/:slug" element={<RefleksjonView />} />
+              <Route path="/dagbok" element={<Dagbok />} />
               <Route path="/boker" element={<Romanar />} />
               <Route path="/admin" element={<Admin />} />
               {/* Redirect old English routes to the standard ones */}

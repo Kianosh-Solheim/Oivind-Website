@@ -39,16 +39,13 @@ export default function Home() {
           initial="hidden"
           animate="visible"
         >
-          <motion.h2 variants={itemVariants} className="text-5xl md:text-7xl font-serif leading-tight">
+          <motion.h2 variants={itemVariants} className="text-4xl md:text-5xl lg:text-6xl font-serif leading-tight">
             {language === 'en' ? (
-              <>Stories.<br />Reflections.<br />Human presence.</>
+              <>About the life we live.<br />And the future we choose to create.</>
             ) : (
-              <>Historier.<br />Refleksjoner.<br />Menneskeleg nærvær.</>
+              <>Om livet vi lever.<br />Og framtida vi vel å skapa.</>
             )}
           </motion.h2>
-          <motion.p variants={itemVariants} className="mt-8 text-xl md:text-2xl font-serif italic font-light text-gray-200">
-            {language === 'en' ? 'About the life we live. And the future we choose to create.' : 'Om livet vi lever. Og framtida vi vel å skapa.'}
-          </motion.p>
           <motion.div variants={itemVariants} className="mt-12">
             <Link to="/refleksjonar" className="border border-white hover:bg-white hover:text-brand-dark transition-all duration-300 text-white font-sans text-xs tracking-[0.15em] uppercase py-4 px-8 inline-block">
               {language === 'en' ? 'READ MY LATEST REFLECTIONS' : 'LES MINE SISTE REFLEKSJONAR'}

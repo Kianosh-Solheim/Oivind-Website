@@ -1,11 +1,12 @@
-import { useState, useEffect } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { ArrowLeft, MessageSquarePlus } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { db } from '../lib/firebase';
 import { collection, getDocs, query, where, documentId } from 'firebase/firestore';
 import { isHtml, calculateReadingTime } from '../lib/utils';
 import { useLanguage } from '../context/LanguageContext';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
+import Comments from '../components/Comments';
 
 interface Article {
   id: string;
@@ -25,6 +26,52 @@ export default function RefleksjonView() {
   const [translationSlug, setTranslationSlug] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const { t, language, setLanguage } = useLanguage();
+  
+  const [selectedText, setSelectedText] = useState('');
+  const [selectionPosition, setSelectionPosition] = useState<{ top: number; left: number } | null>(null);
+  const [activeQuote, setActiveQuote] = useState('');
+  
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleSelection = () => {
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed || !contentRef.current?.contains(selection.anchorNode)) {
+        if (!activeQuote) {
+          setSelectionPosition(null);
+          setSelectedText('');
+        }
+        return;
+      }
+      
+      const text = selection.toString().trim();
+      if (text.length > 0) {
+        const range = selection.getRangeAt(0);
+        const rect = range.getBoundingClientRect();
+        
+        setSelectedText(text);
+        setSelectionPosition({
+          top: rect.top + window.scrollY - 40,
+          left: rect.left + rect.width / 2
+        });
+      }
+    };
+
+    document.addEventListener('selectionchange', handleSelection);
+    return () => document.removeEventListener('selectionchange', handleSelection);
+  }, [activeQuote]);
+
+  const handleQuoteClick = () => {
+    setActiveQuote(selectedText);
+    setSelectionPosition(null);
+    window.getSelection()?.removeAllRanges();
+    
+    // Scroll to comments
+    setTimeout(() => {
+      document.getElementById('comments-section')?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+  };
+
 
   useEffect(() => {
     const fetchArticle = async () => {
@@ -155,6 +202,7 @@ export default function RefleksjonView() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.8, delay: 0.4 }}
+          ref={contentRef}
         >
           {isHtml(article.content) ? (
             <div 
@@ -167,6 +215,36 @@ export default function RefleksjonView() {
             </div>
           )}
         </motion.div>
+        
+        <AnimatePresence>
+          {selectionPosition && (
+            <motion.div
+              initial={{ opacity: 0, y: 10, scale: 0.9 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              style={{ 
+                position: 'absolute', 
+                top: selectionPosition.top, 
+                left: selectionPosition.left,
+                transform: 'translateX(-50%)',
+                zIndex: 50
+              }}
+              className="bg-brand-dark text-white rounded shadow-lg flex items-center shadow-2xl"
+            >
+              <button 
+                onClick={handleQuoteClick}
+                className="flex items-center gap-2 px-4 py-2 text-xs font-semibold uppercase tracking-widest hover:bg-black transition-colors rounded"
+              >
+                <MessageSquarePlus className="w-4 h-4" />
+                {language === 'en' ? 'Comment' : 'Kommenter'}
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div id="comments-section">
+          <Comments articleId={article.id} initialQuote={activeQuote} />
+        </div>
       </motion.section>
     </div>
   );

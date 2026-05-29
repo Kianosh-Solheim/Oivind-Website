@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useLanguage } from '../context/LanguageContext';
+import { useAuth } from '../lib/AuthContext';
 
 export default function Header() {
   const location = useLocation();
@@ -17,11 +18,9 @@ export default function Header() {
 
   const navLinks = [
     { to: '/', label: t('HOME') },
-    { to: '/boker', label: t('BOOKS') },
     { to: '/refleksjonar', label: t('REFLECTIONS') },
-    { to: '/musikk', label: t('MUSIC') },
-    { to: '/foto', label: t('PHOTO') },
-    { to: '/video', label: t('VIDEO') },
+    { to: '/dagbok', label: t('DIARY') },
+    { to: '/boker', label: t('BOOKS') },
     { to: '/om-meg', label: t('ABOUT') },
     { to: '/kontakt', label: t('CONTACT') },
   ];
@@ -74,8 +73,31 @@ export default function Header() {
             <span className="text-gray-300">/</span>
             <button onClick={() => setLanguage('en')} className={`transition-colors ${language === 'en' ? 'text-brand-accent' : 'hover:text-brand-accent'}`}>EN</button>
           </motion.div>
+          
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }} className="ml-4">
+            <LoginButton />
+          </motion.div>
         </nav>
       </AnimatePresence>
     </motion.header>
+  );
+}
+
+function LoginButton() {
+  const { user, signInWithGoogle, logout } = useAuth();
+  const { language } = useLanguage();
+  
+  if (user) {
+    return (
+      <button onClick={logout} className="text-xs uppercase tracking-widest font-semibold border border-brand-dark px-4 py-2 hover:bg-brand-dark hover:text-white transition-colors">
+        {language === 'en' ? 'LOG OUT' : 'LOGG UT'}
+      </button>
+    );
+  }
+  
+  return (
+    <button onClick={signInWithGoogle} className="text-xs uppercase tracking-widest font-semibold bg-brand-dark text-white px-4 py-2 hover:bg-black transition-colors">
+      {language === 'en' ? 'LOG IN' : 'LOGG INN'}
+    </button>
   );
 }
