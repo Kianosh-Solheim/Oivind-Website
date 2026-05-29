@@ -6,7 +6,7 @@ import { collection, getDocs, query, where, documentId } from 'firebase/firestor
 import { isHtml, calculateReadingTime } from '../lib/utils';
 import { useLanguage } from '../context/LanguageContext';
 import { motion, AnimatePresence } from 'motion/react';
-import Comments from '../components/Comments';
+import Comments, { Comment } from '../components/Comments';
 
 interface Article {
   id: string;
@@ -49,7 +49,28 @@ export default function RefleksjonView() {
   const [selectionPosition, setSelectionPosition] = useState<{ top: number; left: number } | null>(null);
   const [activeQuote, setActiveQuote] = useState('');
   
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [focusedCommentId, setFocusedCommentId] = useState<string | undefined>(undefined);
+  const [quotePositions, setQuotePositions] = useState<{commentId: string, top: number, quote: string}[]>([]);
+  const [activeMarginCommentId, setActiveMarginCommentId] = useState<string | null>(null);
+  
   const contentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.margin-comment-card') && !target.closest('.margin-comment-icon')) {
+        setActiveMarginCommentId(null);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('touchstart', handleOutsideClick);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('touchstart', handleOutsideClick);
+    };
+  }, []);
 
   useEffect(() => {
     let timeoutId: NodeJS.Timeout;
@@ -104,6 +125,99 @@ export default function RefleksjonView() {
   };
 
 
+  const fetchComments = async (articleId: string) => {
+    setCommentsLoading(true);
+    try {
+      const q = query(
+        collection(db, 'comments'),
+        where('articleId', '==', articleId)
+      );
+      const snap = await getDocs(q);
+      const fetchedComments = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Comment));
+      
+      fetchedComments.sort((a, b) => {
+        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+        return timeB - timeA;
+      });
+      
+      setComments(fetchedComments);
+    } catch (error) {
+      console.error("Error fetching comments", error);
+    } finally {
+      setCommentsLoading(false);
+    }
+  };
+
+  const handleAddComment = async (comment: Omit<Comment, 'id' | 'createdAt'>) => {
+    try {
+      const { addDoc, serverTimestamp } = await import('firebase/firestore');
+      
+      const docRef = await addDoc(collection(db, 'comments'), {
+        ...comment,
+        createdAt: serverTimestamp()
+      });
+      
+      setComments(prev => [{
+        id: docRef.id,
+        ...comment,
+        createdAt: { toMillis: () => Date.now() }
+      } as unknown as Comment, ...prev]);
+      
+    } catch (error) {
+      console.error('Error adding comment', error);
+      throw error;
+    }
+  };
+
+  useEffect(() => {
+    if (!contentRef.current || comments.length === 0) return;
+    
+    // Process quote positions
+    const newPositions: {commentId: string, top: number, quote: string}[] = [];
+    
+    // We get all text nodes and search for the quotes (a simple approximation)
+    const el = contentRef.current;
+    
+    comments.forEach(comment => {
+      if (comment.quote) {
+        // To find the text, we can use window.find() or an iterative search.
+        // A simpler way: we just find the first text node that contains a good chunk of the quote
+        // Since quotes can be large, we might match just the first 15 chars.
+        const searchStr = comment.quote.substring(0, 15).trim();
+        if (searchStr.length < 3) return;
+        
+        const finder = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+        let node;
+        let foundTop = -1;
+        while ((node = finder.nextNode())) {
+          if (node.nodeValue?.includes(searchStr)) {
+            const range = document.createRange();
+            const idx = node.nodeValue.indexOf(searchStr);
+            range.setStart(node, idx);
+            range.setEnd(node, idx + searchStr.length);
+            const rect = range.getBoundingClientRect();
+            foundTop = rect.top + window.scrollY;
+            break;
+          }
+        }
+        
+        if (foundTop > 0) {
+          // Adjust relative to container, wait window.scrollY is absolute,
+          // we should be relative to contentRef offsetTop but absolute in document is fine
+          // Let's use relative to contentRef
+          const containerRect = el.getBoundingClientRect();
+          newPositions.push({
+            commentId: comment.id,
+            top: foundTop - (containerRect.top + window.scrollY), 
+            quote: comment.quote
+          });
+        }
+      }
+    });
+    
+    setQuotePositions(newPositions);
+  }, [comments, article]);
   useEffect(() => {
     const fetchArticle = async () => {
       if (!slug) return;
@@ -124,6 +238,10 @@ export default function RefleksjonView() {
         }
         
         setArticle(fetchedArticle);
+        
+        if (fetchedArticle) {
+          fetchComments(fetchedArticle.id);
+        }
         
         if (fetchedArticle?.translationId) {
           const qTrans = query(collection(db, 'articles'), where(documentId(), '==', fetchedArticle.translationId));
@@ -228,15 +346,86 @@ export default function RefleksjonView() {
           </motion.figure>
         )}
         
-        <motion.div 
-          className="bg-white p-8 md:p-12 lg:p-16 border border-brand-sand shadow-sm"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.4 }}
-          ref={contentRef}
-        >
-          <ArticleContent content={article.content} />
-        </motion.div>
+        {/* Margin Comments Container */}
+        <div className="relative">
+          <motion.div 
+            className="bg-white p-8 md:p-12 lg:p-16 border border-brand-sand shadow-sm"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, delay: 0.4 }}
+            ref={contentRef}
+          >
+            <ArticleContent content={article.content} />
+          </motion.div>
+          
+          {/* Margin Annotations Layer */}
+          {quotePositions.map((pos) => {
+            const isHoveredOrActive = activeMarginCommentId === pos.commentId;
+            const comment = comments.find(c => c.id === pos.commentId);
+            
+            if (!comment) return null;
+
+            return (
+            <div 
+              key={pos.commentId}
+              className="absolute flex items-center justify-center cursor-pointer transition-all right-2 lg:-right-12"
+              style={{
+                top: `${pos.top}px`,
+                width: '32px',
+                height: '32px',
+                zIndex: isHoveredOrActive ? 50 : 40
+              }}
+            >
+              <div 
+                className={`margin-comment-icon transition-colors p-2 rounded-full shadow-sm border border-gray-200 ${isHoveredOrActive ? 'bg-brand-accent text-white scale-110' : 'bg-brand-sand hover:bg-brand-accent hover:text-white hover:scale-110 text-brand-dark'}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setActiveMarginCommentId(isHoveredOrActive ? null : pos.commentId);
+                }}
+              >
+                <MessageSquarePlus className="w-4 h-4 pointer-events-none" />
+              </div>
+              
+              <AnimatePresence>
+                {isHoveredOrActive && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                    className="margin-comment-card absolute top-10 right-0 lg:left-10 lg:right-auto w-64 bg-white p-4 shadow-xl border border-gray-200 rounded text-left cursor-default"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex items-center gap-2 mb-3">
+                      {comment.userAvatar ? (
+                        <img src={comment.userAvatar} alt={comment.userName} className="w-6 h-6 rounded-full" />
+                      ) : (
+                        <div className="w-6 h-6 rounded-full bg-brand-sand text-brand-dark flex items-center justify-center text-[10px] font-semibold">
+                          {comment.userName.charAt(0)}
+                        </div>
+                      )}
+                      <span className="text-xs font-semibold text-brand-dark truncate">{comment.userName}</span>
+                    </div>
+                    <p className="text-sm text-brand-dark/90 leading-relaxed whitespace-pre-wrap">{comment.content}</p>
+                    
+                    <button 
+                      className="mt-4 text-[10px] uppercase tracking-widest text-brand-muted hover:text-brand-accent transition-colors font-semibold"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setFocusedCommentId(pos.commentId);
+                        setActiveMarginCommentId(null);
+                        const el = document.getElementById(`comment-${pos.commentId}`);
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }}
+                    >
+                      {language === 'en' ? 'View in comment section' : 'Vis i kommentarfelt'}
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+            );
+          })}
+        </div>
         
         <AnimatePresence>
           {selectionPosition && (
@@ -272,7 +461,14 @@ export default function RefleksjonView() {
         </AnimatePresence>
 
         <div id="comments-section">
-          <Comments articleId={article.id} initialQuote={activeQuote} />
+          <Comments 
+            articleId={article.id} 
+            initialQuote={activeQuote} 
+            comments={comments} 
+            loading={commentsLoading} 
+            onAddComment={handleAddComment} 
+            focusedCommentId={focusedCommentId}
+          />
         </div>
       </motion.section>
     </div>

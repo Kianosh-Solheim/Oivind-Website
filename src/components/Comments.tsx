@@ -6,7 +6,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { MessageSquare, Quote } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
-interface Comment {
+export interface Comment {
   id: string;
   articleId: string;
   userId: string;
@@ -17,11 +17,18 @@ interface Comment {
   createdAt: any;
 }
 
-export default function Comments({ articleId, initialQuote = '' }: { articleId: string, initialQuote?: string }) {
-  const [comments, setComments] = useState<Comment[]>([]);
+interface CommentsProps {
+  articleId: string;
+  initialQuote?: string;
+  comments: Comment[];
+  loading: boolean;
+  onAddComment: (comment: Omit<Comment, 'id' | 'createdAt'>) => Promise<void>;
+  focusedCommentId?: string;
+}
+
+export default function Comments({ articleId, initialQuote = '', comments, loading, onAddComment, focusedCommentId }: CommentsProps) {
   const [newComment, setNewComment] = useState('');
   const [activeQuote, setActiveQuote] = useState(initialQuote);
-  const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   
   const { user, signInWithGoogle } = useAuth();
@@ -30,34 +37,6 @@ export default function Comments({ articleId, initialQuote = '' }: { articleId: 
   useEffect(() => {
     setActiveQuote(initialQuote);
   }, [initialQuote]);
-
-  useEffect(() => {
-    const fetchComments = async () => {
-      try {
-        const q = query(
-          collection(db, 'comments'),
-          where('articleId', '==', articleId)
-        );
-        const snap = await getDocs(q);
-        const fetchedComments = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Comment));
-        
-        // Sort manually if index is not created yet
-        fetchedComments.sort((a, b) => {
-          const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
-          const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
-          return timeB - timeA;
-        });
-        
-        setComments(fetchedComments);
-      } catch (error) {
-        console.error("Error fetching comments", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    fetchComments();
-  }, [articleId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,16 +51,9 @@ export default function Comments({ articleId, initialQuote = '' }: { articleId: 
         userAvatar: user.photoURL || '',
         content: newComment.trim(),
         quote: activeQuote || null,
-        createdAt: serverTimestamp()
       };
       
-      const docRef = await addDoc(collection(db, 'comments'), commentData);
-      
-      setComments([{
-        id: docRef.id,
-        ...commentData,
-        createdAt: { toMillis: () => Date.now() } // Optimistic timestamp
-      } as unknown as Comment, ...comments]);
+      await onAddComment(commentData);
       
       setNewComment('');
       setActiveQuote('');
@@ -197,7 +169,8 @@ export default function Comments({ articleId, initialQuote = '' }: { articleId: 
               key={comment.id}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-white p-6 border border-gray-100"
+              className={`bg-white p-6 border transition-all ${focusedCommentId === comment.id ? 'border-brand-accent shadow-md' : 'border-gray-100'}`}
+              id={`comment-${comment.id}`}
             >
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
