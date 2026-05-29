@@ -19,6 +19,7 @@ interface Article {
   slug?: string;
   imageUrl?: string;
   imageCaption?: string;
+  translationId?: string;
 }
 
 interface Book {
@@ -40,7 +41,7 @@ export default function Admin() {
   const [showImagePicker, setShowImagePicker] = useState(false);
   const [editingArticleId, setEditingArticleId] = useState<string | null>(null);
   const [articleFilter, setArticleFilter] = useState('all');
-  const [articleForm, setArticleForm] = useState({ title: '', content: '', published: true, language: 'no', slug: '', imageUrl: '', imageCaption: '' });
+  const [articleForm, setArticleForm] = useState({ title: '', content: '', published: true, language: 'no', slug: '', imageUrl: '', imageCaption: '', translationId: '' });
   const [infoDialog, setInfoDialog] = useState<{title: string, content: React.ReactNode} | null>(null);
   const [dashboardTab, setDashboardTab] = useState<'articles' | 'books' | 'files'>('articles');
   
@@ -54,7 +55,7 @@ export default function Admin() {
       if (params.get('compose') === 'true') {
         const lang = params.get('lang') || 'no';
         setEditingArticleId(null);
-        setArticleForm({ title: '', content: '', published: true, language: lang, slug: '', imageUrl: '', imageCaption: '' });
+        setArticleForm({ title: '', content: '', published: true, language: lang, slug: '', imageUrl: '', imageCaption: '', translationId: '' });
         setIsComposing(true);
       } else if (params.get('edit')) {
         const editId = params.get('edit')!;
@@ -69,7 +70,8 @@ export default function Admin() {
               language: data.language || 'no',
               slug: data.slug || '',
               imageUrl: data.imageUrl || '',
-              imageCaption: data.imageCaption || ''
+              imageCaption: data.imageCaption || '',
+              translationId: data.translationId || ''
             });
             setIsComposing(true);
           }
@@ -105,20 +107,30 @@ export default function Admin() {
         slug: articleForm.slug || articleForm.title.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
         imageUrl: articleForm.imageUrl || '',
         imageCaption: articleForm.imageCaption || '',
+        translationId: articleForm.translationId || '',
         updatedAt: serverTimestamp()
       };
 
+      let newArticleId = editingArticleId;
       if (editingArticleId) {
         await updateDoc(doc(db, 'articles', editingArticleId), articleData);
       } else {
-        await addDoc(collection(db, 'articles'), {
+        const docRef = await addDoc(collection(db, 'articles'), {
           ...articleData,
           authorId: user.uid,
           createdAt: serverTimestamp(),
         });
+        newArticleId = docRef.id;
       }
 
-      setArticleForm({ title: '', content: '', published: true, language: 'no', slug: '', imageUrl: '', imageCaption: '' });
+      if (articleForm.translationId && newArticleId) {
+        // Also update the translated article back to this one
+        await updateDoc(doc(db, 'articles', articleForm.translationId), {
+          translationId: newArticleId
+        });
+      }
+
+      setArticleForm({ title: '', content: '', published: true, language: 'no', slug: '', imageUrl: '', imageCaption: '', translationId: '' });
       setEditingArticleId(null);
       setIsComposing(false);
       navigate('/admin');
@@ -150,6 +162,22 @@ export default function Admin() {
       console.error("Error adding book", e);
       alert("Feil ved lagring av bok. Er du sikker på at du er administrator?");
     }
+  };
+
+  const createTranslation = (article: Article) => {
+    const targetLang = (article.language || 'no') === 'no' ? 'en' : 'no';
+    setEditingArticleId(null);
+    setArticleForm({
+      title: `${article.title} (${targetLang.toUpperCase()})`,
+      content: '', // Let them translate the content manually or could prefill
+      published: false,
+      language: targetLang,
+      slug: '',
+      imageUrl: article.imageUrl || '',
+      imageCaption: article.imageCaption || '',
+      translationId: article.id
+    });
+    setIsComposing(true);
   };
 
   const deleteArticle = async (id: string) => {
@@ -204,11 +232,23 @@ export default function Admin() {
                   title: 'Språkvalg',
                   content: <p>Vel språket artikkelen er skriven på. Dette blir brukt for å filtrere og vise riktig versjon til rett publikum.</p>
                 })} 
-                className="text-gray-300 hover:text-brand-dark transition-colors"
+                className="text-gray-300 hover:text-brand-dark transition-colors mr-2"
                 title="Informasjon om språk"
               >
                 <Info className="w-4 h-4" />
               </button>
+
+              {/* Translation Selection */}
+              <select 
+                value={articleForm.translationId || ''} 
+                onChange={e => setArticleForm({...articleForm, translationId: e.target.value})} 
+                className="text-xs border-none focus:ring-0 cursor-pointer text-brand-muted font-medium bg-transparent outline-none max-w-[120px] truncate"
+              >
+                <option value="">Ingen omsetting</option>
+                {articles.filter(a => a.language !== articleForm.language && a.id !== editingArticleId).map(a => (
+                  <option key={a.id} value={a.id}>Lenke til: {a.title}</option>
+                ))}
+              </select>
             </div>
 
             <div className="flex items-center gap-1 group">
@@ -482,6 +522,9 @@ export default function Admin() {
                     </td>
                     <td className="p-4 text-right">
                       <div className="flex gap-4 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                        {!article.translationId && (
+                          <button onClick={() => createTranslation(article)} className="text-brand-accent text-xs font-semibold tracking-widest hover:text-brand-dark transition-colors">OMSETT</button>
+                        )}
                         <button onClick={() => editArticle(article)} className="text-brand-dark text-xs font-semibold tracking-widest hover:text-brand-accent transition-colors">ENDRE</button>
                         <button onClick={() => deleteArticle(article.id!)} className="text-red-500 text-xs font-semibold tracking-widest hover:opacity-80 transition-opacity">SLETT</button>
                       </div>
@@ -513,6 +556,9 @@ export default function Admin() {
                     {article.imageUrl && '📸 Bilde inkludert'}
                   </div>
                   <div className="flex gap-4">
+                    {!article.translationId && (
+                      <button onClick={() => createTranslation(article)} className="text-brand-accent text-xs font-semibold tracking-widest hover:text-brand-dark transition-colors">OMSETT</button>
+                    )}
                     <button onClick={() => editArticle(article)} className="text-brand-dark text-xs font-semibold tracking-widest hover:text-brand-accent transition-colors">ENDRE</button>
                     <button onClick={() => deleteArticle(article.id!)} className="text-red-500 text-xs font-semibold tracking-widest opacity-80 hover:opacity-100">SLT</button>
                   </div>

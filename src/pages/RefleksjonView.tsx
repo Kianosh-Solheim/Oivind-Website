@@ -15,30 +15,48 @@ interface Article {
   slug?: string;
   imageUrl?: string;
   imageCaption?: string;
+  translationId?: string;
 }
 
 export default function RefleksjonView() {
   const { slug } = useParams();
   const [article, setArticle] = useState<Article | null>(null);
+  const [translationSlug, setTranslationSlug] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const { t, language } = useLanguage();
+  const { t, language, setLanguage } = useLanguage();
 
   useEffect(() => {
     const fetchArticle = async () => {
       if (!slug) return;
       try {
+        let fetchedArticle: Article | null = null;
         const qSlug = query(collection(db, 'articles'), where('slug', '==', slug), where('published', '==', true));
         const snapSlug = await getDocs(qSlug);
         
         if (!snapSlug.empty) {
-          setArticle({ id: snapSlug.docs[0].id, ...snapSlug.docs[0].data() } as Article);
+          fetchedArticle = { id: snapSlug.docs[0].id, ...snapSlug.docs[0].data() } as Article;
         } else {
           // Fallback to searching by ID
           const qId = query(collection(db, 'articles'), where(documentId(), '==', slug), where('published', '==', true));
           const snapId = await getDocs(qId);
           if (!snapId.empty) {
-            setArticle({ id: snapId.docs[0].id, ...snapId.docs[0].data() } as Article);
+            fetchedArticle = { id: snapId.docs[0].id, ...snapId.docs[0].data() } as Article;
           }
+        }
+        
+        setArticle(fetchedArticle);
+        
+        if (fetchedArticle?.translationId) {
+          const qTrans = query(collection(db, 'articles'), where(documentId(), '==', fetchedArticle.translationId));
+          const snapTrans = await getDocs(qTrans);
+          if (!snapTrans.empty) {
+            const transData = snapTrans.docs[0].data() as Article;
+            if (transData.published) {
+              setTranslationSlug(transData.slug || snapTrans.docs[0].id);
+            }
+          }
+        } else {
+          setTranslationSlug(null);
         }
       } catch (error) {
         console.error("Error fetching article", error);
@@ -74,10 +92,25 @@ export default function RefleksjonView() {
         <Link to="/refleksjonar" className="inline-flex items-center text-brand-muted hover:text-brand-dark transition-colors font-sans text-xs font-semibold tracking-widest uppercase mb-12">
           <ArrowLeft className="mr-2 w-4 h-4" /> {t('ALL_REFLECTIONS')}
         </Link>
-        <div className="flex items-center gap-4 mb-4">
-          <span className="text-xs text-brand-muted uppercase tracking-widest font-semibold">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+          <span className="text-xs text-brand-muted uppercase tracking-widest font-semibold flex items-center gap-4">
             {calculateReadingTime(article.content)} min read
+            {article.language && (
+              <span className="bg-brand-sand px-2 py-0.5 text-[10px] text-brand-dark/70 rounded-sm">
+                {article.language === 'en' ? 'ENGLISH' : 'NORSK'}
+              </span>
+            )}
           </span>
+          
+          {translationSlug && (
+            <Link 
+              to={`/refleksjonar/${translationSlug}`}
+              onClick={() => setLanguage((article.language || 'no') === 'en' ? 'no' : 'en')}
+              className="inline-flex items-center text-brand-accent hover:text-brand-dark text-xs font-semibold tracking-widest uppercase transition-colors"
+            >
+              {article.language === 'en' ? 'Les på norsk' : 'Read in English'} &rarr;
+            </Link>
+          )}
         </div>
         <h1 className="text-4xl md:text-5xl lg:text-6xl font-serif text-brand-dark leading-tight mb-12">
           {article.title}
