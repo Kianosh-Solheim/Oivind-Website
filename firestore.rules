@@ -97,5 +97,25 @@ service cloud.firestore {
                     
       allow delete: if isSignedIn() && isAdmin() && isValidId(imageId);
     }
+    
+    function isValidComment(data) {
+      return data.keys().hasAll(['articleId', 'userId', 'userName', 'content', 'createdAt']) &&
+             data.articleId is string &&
+             data.userId is string && data.userId == request.auth.uid &&
+             data.userName is string &&
+             data.content is string && data.content.size() <= 10000 && data.content.size() > 0 &&
+             (!('userAvatar' in data) || data.userAvatar is string) &&
+             (!('quote' in data) || data.quote is string || data.quote == null) &&
+             data.createdAt is timestamp;
+    }
+
+    match /comments/{commentId} {
+      allow read: if true;
+      allow create: if isSignedIn() &&
+                    isValidComment(incoming()) &&
+                    incoming().createdAt == request.time;
+      allow update: if isSignedIn() && incoming().userId == request.auth.uid && isValidComment(incoming());
+      allow delete: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+    }
   }
 }

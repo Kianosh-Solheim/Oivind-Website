@@ -20,6 +20,24 @@ interface Article {
   translationId?: string;
 }
 
+import { memo } from 'react';
+
+const ArticleContent = memo(({ content }: { content: string }) => {
+  if (isHtml(content)) {
+    return (
+      <div 
+        className="prose prose-brand max-w-none text-brand-dark/90 font-serif leading-relaxed text-lg"
+        dangerouslySetInnerHTML={{ __html: content }}
+      />
+    );
+  }
+  return (
+    <div className="prose prose-brand max-w-none text-brand-dark/90 font-serif leading-relaxed text-lg whitespace-pre-wrap">
+      {content}
+    </div>
+  );
+});
+
 export default function RefleksjonView() {
   const { slug } = useParams();
   const [article, setArticle] = useState<Article | null>(null);
@@ -34,32 +52,45 @@ export default function RefleksjonView() {
   const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const handleSelection = () => {
-      const selection = window.getSelection();
-      if (!selection || selection.isCollapsed || !contentRef.current?.contains(selection.anchorNode)) {
-        if (!activeQuote) {
-          setSelectionPosition(null);
-          setSelectedText('');
+    let timeoutId: NodeJS.Timeout;
+
+    const handleSelectionChange = () => {
+      clearTimeout(timeoutId);
+      // Wait a moment for selection to be completely finished
+      timeoutId = setTimeout(() => {
+        const selection = window.getSelection();
+        if (!selection || selection.isCollapsed || !contentRef.current?.contains(selection.anchorNode)) {
+          setSelectionPosition(prev => {
+            if (prev) {
+              setSelectedText('');
+              return null;
+            }
+            return prev;
+          });
+          return;
         }
-        return;
-      }
-      
-      const text = selection.toString().trim();
-      if (text.length > 0) {
-        const range = selection.getRangeAt(0);
-        const rect = range.getBoundingClientRect();
         
-        setSelectedText(text);
-        setSelectionPosition({
-          top: rect.top + window.scrollY - 40,
-          left: rect.left + rect.width / 2
-        });
-      }
+        const text = selection.toString().trim();
+        if (text.length > 0) {
+          const range = selection.getRangeAt(0);
+          const rect = range.getBoundingClientRect();
+          
+          setSelectionPosition({
+            top: rect.top + window.scrollY - 40,
+            left: rect.left + rect.width / 2
+          });
+          setSelectedText(text);
+        }
+      }, 200);
     };
 
-    document.addEventListener('selectionchange', handleSelection);
-    return () => document.removeEventListener('selectionchange', handleSelection);
-  }, [activeQuote]);
+    document.addEventListener('selectionchange', handleSelectionChange);
+    
+    return () => {
+      clearTimeout(timeoutId);
+      document.removeEventListener('selectionchange', handleSelectionChange);
+    };
+  }, []);
 
   const handleQuoteClick = () => {
     setActiveQuote(selectedText);
@@ -204,16 +235,7 @@ export default function RefleksjonView() {
           transition={{ duration: 0.8, delay: 0.4 }}
           ref={contentRef}
         >
-          {isHtml(article.content) ? (
-            <div 
-              className="prose prose-brand max-w-none text-brand-dark/90 font-serif leading-relaxed text-lg"
-              dangerouslySetInnerHTML={{ __html: article.content }}
-            />
-          ) : (
-            <div className="prose prose-brand max-w-none text-brand-dark/90 font-serif leading-relaxed text-lg whitespace-pre-wrap">
-              {article.content}
-            </div>
-          )}
+          <ArticleContent content={article.content} />
         </motion.div>
         
         <AnimatePresence>
@@ -232,7 +254,14 @@ export default function RefleksjonView() {
               className="bg-brand-dark text-white rounded shadow-lg flex items-center shadow-2xl"
             >
               <button 
-                onClick={handleQuoteClick}
+                onMouseDown={(e) => {
+                  e.preventDefault(); // Prevents selection from being cleared
+                  handleQuoteClick(); // Replaces onClick
+                }}
+                onTouchStart={(e) => {
+                  e.preventDefault();
+                  handleQuoteClick();
+                }}
                 className="flex items-center gap-2 px-4 py-2 text-xs font-semibold uppercase tracking-widest hover:bg-black transition-colors rounded"
               >
                 <MessageSquarePlus className="w-4 h-4" />
