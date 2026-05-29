@@ -16,10 +16,14 @@ export default function FileManager({ onSelect }: { onSelect?: (url: string, cap
   const [images, setImages] = useState<ImageFile[]>([]);
   const [loading, setLoading] = useState(true);
   
-  const [activeTab, setActiveTab] = useState<'my-images' | 'unsplash'>('my-images');
+  const [activeTab, setActiveTab] = useState<'my-images' | 'unsplash' | 'wikimedia'>('my-images');
   const [unsplashQuery, setUnsplashQuery] = useState('');
   const [unsplashImages, setUnsplashImages] = useState<any[]>([]);
   const [unsplashLoading, setUnsplashLoading] = useState(false);
+  
+  const [wikiQuery, setWikiQuery] = useState('');
+  const [wikiImages, setWikiImages] = useState<any[]>([]);
+  const [wikiLoading, setWikiLoading] = useState(false);
   
   // Custom dialog states to replace window.*
   const [uploadPrompt, setUploadPrompt] = useState<{file: File, filename: string} | null>(null);
@@ -152,6 +156,29 @@ export default function FileManager({ onSelect }: { onSelect?: (url: string, cap
     }
   };
 
+  const searchWikimedia = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!wikiQuery.trim()) return;
+    
+    setWikiLoading(true);
+    try {
+      const res = await fetch(`https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(wikiQuery)}&gsrnamespace=6&gsrlimit=20&prop=imageinfo&iiprop=url|extmetadata&format=json&origin=*`);
+      const data = await res.json();
+      if (data.query && data.query.pages) {
+        const pages = Object.values(data.query.pages);
+        /* Filter out unsupported formats if any, though namespace 6 is mostly images/media */
+        setWikiImages(pages);
+      } else {
+        setWikiImages([]);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Kunne ikkje hente bilete frå Wikimedia Commons.');
+    } finally {
+      setWikiLoading(false);
+    }
+  };
+
   return (
     <div className="bg-brand-surface border border-gray-100 p-6 flex flex-col h-full">
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 gap-4">
@@ -167,6 +194,12 @@ export default function FileManager({ onSelect }: { onSelect?: (url: string, cap
             onClick={() => setActiveTab('unsplash')}
           >
             Unsplash
+          </button>
+          <button 
+            className={`pb-2 text-sm font-semibold tracking-widest uppercase transition-colors ${activeTab === 'wikimedia' ? 'text-brand-dark border-b-2 border-brand-dark' : 'text-brand-muted hover:text-brand-dark border-b-2 border-transparent'}`}
+            onClick={() => setActiveTab('wikimedia')}
+          >
+            Wikimedia
           </button>
         </div>
         
@@ -252,7 +285,9 @@ export default function FileManager({ onSelect }: { onSelect?: (url: string, cap
             <div className="columns-2 md:columns-3 lg:columns-4 gap-4 pb-4 space-y-4">
               {unsplashImages.map(img => (
                 <div key={img.id} className="break-inside-avoid bg-white border border-gray-100 flex flex-col group relative overflow-hidden cursor-pointer" onClick={() => {
-                  const captionStr = `Bilde av ${img.user?.name} på Unsplash`;
+                  const authorLink = img.user?.links?.html ? `<a href="${img.user.links.html}?utm_source=ais_nordic_storyteller&utm_medium=referral" target="_blank" rel="noopener noreferrer" class="underline hover:text-brand-dark">${img.user?.name}</a>` : img.user?.name;
+                  const unsplashLink = `<a href="https://unsplash.com/?utm_source=ais_nordic_storyteller&utm_medium=referral" target="_blank" rel="noopener noreferrer" class="underline hover:text-brand-dark">Unsplash</a>`;
+                  const captionStr = `Bilde av ${authorLink} på ${unsplashLink}`;
                   onSelect && onSelect(img.urls.regular, captionStr);
                 }}>
                   <div className="w-full bg-gray-50 flex items-center justify-center overflow-hidden">
@@ -272,6 +307,57 @@ export default function FileManager({ onSelect }: { onSelect?: (url: string, cap
                   )}
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+        {activeTab === 'wikimedia' && (
+          <div className="flex flex-col h-full gap-6">
+            <form onSubmit={searchWikimedia} className="flex gap-2 relative">
+              <input 
+                type="text" 
+                placeholder="Søk på Wikimedia Commons..."
+                value={wikiQuery}
+                onChange={e => setWikiQuery(e.target.value)}
+                className="flex-grow p-3 text-sm border-none ring-1 ring-gray-200 focus:ring-brand-accent bg-white outline-none pl-10"
+              />
+              <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+              <button type="submit" className="px-6 py-3 bg-brand-dark text-white text-xs font-semibold tracking-widest uppercase hover:bg-black transition-colors" disabled={wikiLoading}>
+                {wikiLoading ? 'Søkjer...' : 'Søk'}
+              </button>
+            </form>
+            
+            <div className="columns-2 md:columns-3 lg:columns-4 gap-4 pb-4 space-y-4">
+              {wikiImages.map((img: any) => {
+                const info = img.imageinfo?.[0];
+                if (!info) return null;
+                const author = info.extmetadata?.Artist?.value ? info.extmetadata.Artist.value.replace(/<[^>]+>/g, '') : 'Ukjend';
+                const fileUrl = info.url;
+                
+                return (
+                <div key={img.pageid} className="break-inside-avoid bg-white border border-gray-100 flex flex-col group relative overflow-hidden cursor-pointer" onClick={() => {
+                  const authorLink = info.extmetadata?.Artist?.value ? info.extmetadata.Artist.value : 'Ukjend'; // Some already carry HTML links
+                  const wikiLink = `<a href="${info.descriptionurl}" target="_blank" rel="noopener noreferrer" class="underline hover:text-brand-dark">Wikimedia Commons</a>`;
+                  const captionStr = `Bilde av ${authorLink} frå ${wikiLink}`;
+                  onSelect && onSelect(fileUrl, captionStr);
+                }}>
+                  <div className="w-full bg-gray-50 flex items-center justify-center overflow-hidden">
+                    <img loading="lazy" src={fileUrl} alt={img.title} className="w-full h-auto block object-cover group-hover:scale-105 transition-transform duration-500" />
+                  </div>
+                  <div className="p-3 border-t border-gray-50 bg-white z-10 relative">
+                    <span className="text-[10px] text-brand-muted truncate block" title={author}>Av {author}</span>
+                  </div>
+                  {onSelect && (
+                     <div 
+                       className="absolute inset-0 bg-brand-accent/10 opacity-0 group-hover:opacity-100 flex items-center justify-center cursor-pointer transition-opacity pointer-events-none z-20"
+                     >
+                       <span className="bg-white px-3 py-1.5 text-xs font-bold tracking-widest text-brand-dark shadow-sm text-center">
+                         VEL<br/><span className="text-[9px] font-normal lowercase tracking-normal">med kreditering</span>
+                       </span>
+                     </div>
+                  )}
+                </div>
+                );
+              })}
             </div>
           </div>
         )}

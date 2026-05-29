@@ -5,6 +5,7 @@ import { db } from '../lib/firebase';
 import { collection, getDocs, query, where, documentId } from 'firebase/firestore';
 import { isHtml, calculateReadingTime } from '../lib/utils';
 import { useLanguage } from '../context/LanguageContext';
+import { motion } from 'motion/react';
 
 interface Article {
   id: string;
@@ -69,8 +70,10 @@ export default function RefleksjonView() {
 
   if (loading) {
     return (
-      <div className="bg-brand-surface min-h-screen py-32 text-center text-brand-muted">
-        {language === 'en' ? 'Loading reflection...' : 'Laster inn refleksjonen...'}
+      <div className="bg-brand-surface min-h-screen py-32 text-center text-brand-muted flex items-center justify-center">
+        <motion.div animate={{ opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 1.5 }}>
+          {language === 'en' ? 'Loading reflection...' : 'Laster inn refleksjonen...'}
+        </motion.div>
       </div>
     );
   }
@@ -78,17 +81,24 @@ export default function RefleksjonView() {
   if (!article) {
     return (
       <div className="bg-brand-surface min-h-screen py-32 text-center">
-        <h1 className="text-3xl font-serif text-brand-dark mb-4">{language === 'en' ? 'Reflection not found' : 'Fann ikkje refleksjonen'}</h1>
-        <Link to="/refleksjonar" className="text-brand-accent hover:text-brand-dark transition-colors uppercase tracking-widest text-xs font-semibold">
-          {language === 'en' ? 'BACK TO REFLECTIONS' : 'TILBAKE TIL REFLEKSJONAR'}
-        </Link>
+        <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="text-3xl font-serif text-brand-dark mb-4">{language === 'en' ? 'Reflection not found' : 'Fann ikkje refleksjonen'}</motion.h1>
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
+          <Link to="/refleksjonar" className="text-brand-accent hover:text-brand-dark transition-colors uppercase tracking-widest text-xs font-semibold">
+            {language === 'en' ? 'BACK TO REFLECTIONS' : 'TILBAKE TIL REFLEKSJONAR'}
+          </Link>
+        </motion.div>
       </div>
     );
   }
 
   return (
     <div className="bg-brand-surface min-h-screen">
-      <section className="py-20 md:py-32 px-6 md:px-12 max-w-3xl mx-auto">
+      <motion.section 
+        className="py-20 md:py-32 px-6 md:px-12 max-w-3xl mx-auto"
+        initial={{ opacity: 0, y: 30 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.8, ease: "easeOut" }}
+      >
         <Link to="/refleksjonar" className="inline-flex items-center text-brand-muted hover:text-brand-dark transition-colors font-sans text-xs font-semibold tracking-widest uppercase mb-12">
           <ArrowLeft className="mr-2 w-4 h-4" /> {t('ALL_REFLECTIONS')}
         </Link>
@@ -112,24 +122,40 @@ export default function RefleksjonView() {
             </Link>
           )}
         </div>
-        <h1 className="text-4xl md:text-5xl lg:text-6xl font-serif text-brand-dark leading-tight mb-12">
+        <motion.h1 
+          className="text-4xl md:text-5xl lg:text-6xl font-serif text-brand-dark leading-tight mb-12"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.2 }}
+        >
           {article.title}
-        </h1>
+        </motion.h1>
         
         {article.imageUrl && (
-          <figure className="mb-12">
+          <motion.figure 
+            className="mb-12"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.8, delay: 0.3 }}
+          >
             <div className="w-full h-[40vh] min-h-[300px] overflow-hidden bg-brand-sand">
               <img loading="lazy" src={article.imageUrl} alt={article.title} className="w-full h-full object-cover" />
             </div>
             {article.imageCaption && (
-              <figcaption className="text-center text-sm text-brand-muted mt-3 italic">
-                {article.imageCaption}
-              </figcaption>
+              <figcaption 
+                className="text-center text-sm text-brand-muted mt-3 italic"
+                dangerouslySetInnerHTML={{ __html: article.imageCaption }}
+              />
             )}
-          </figure>
+          </motion.figure>
         )}
         
-        <div className="bg-white p-8 md:p-12 lg:p-16 border border-brand-sand shadow-sm">
+        <motion.div 
+          className="bg-white p-8 md:p-12 lg:p-16 border border-brand-sand shadow-sm"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.4 }}
+        >
           {isHtml(article.content) ? (
             <div 
               className="prose prose-brand max-w-none text-brand-dark/90 font-serif leading-relaxed text-lg"
@@ -140,8 +166,8 @@ export default function RefleksjonView() {
               {article.content}
             </div>
           )}
-        </div>
-      </section>
+        </motion.div>
+      </motion.section>
     </div>
   );
 }
