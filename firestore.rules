@@ -125,7 +125,12 @@ service cloud.firestore {
              (!('language' in data) || (data.language is string && (data.language == 'no' || data.language == 'en' || data.language == 'both'))) &&
              data.createdAt is timestamp &&
              data.updatedAt is timestamp &&
-             (!('authorId' in data) || data.authorId is string);
+             (!('authorId' in data) || data.authorId is string) &&
+             (!('published' in data) || data.published is bool) &&
+             (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 1000000)) &&
+             (!('imageCaption' in data) || (data.imageCaption is string && data.imageCaption.size() <= 1000000)) &&
+             (!('translationId' in data) || (data.translationId is string)) &&
+             (!('slug' in data) || (data.slug is string));
     }
 
     match /diary/{diaryId} {

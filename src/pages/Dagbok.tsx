@@ -11,8 +11,11 @@ interface DiaryEntry {
   id: string;
   title: string;
   content: string;
+  published?: boolean;
   language: string;
   createdAt: any;
+  imageUrl?: string;
+  imageCaption?: string;
 }
 
 export default function Dagbok() {
@@ -28,6 +31,7 @@ export default function Dagbok() {
         const fetched = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as DiaryEntry));
         
         const filtered = fetched.filter(a => {
+          if (a.published === false) return false;
           if (language === 'en') return a.language === 'en' || a.language === 'both';
           return a.language === 'no' || a.language === 'both' || !a.language;
         });
@@ -109,6 +113,15 @@ export default function Dagbok() {
                     )}
                   </div>
                   
+                  {entry.imageUrl && (
+                    <div className="w-full mb-8">
+                      <img src={entry.imageUrl} className="w-full h-auto max-h-[500px] object-cover rounded-sm" />
+                      {entry.imageCaption && (
+                        <p className="text-sm text-center text-brand-muted mt-2 italic" dangerouslySetInnerHTML={{ __html: entry.imageCaption }} />
+                      )}
+                    </div>
+                  )}
+
                   {isHtml(entry.content) ? (
                     <div 
                       className="prose prose-brand max-w-none text-brand-dark/90 font-serif leading-relaxed"

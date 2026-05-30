@@ -6,7 +6,6 @@ import TextareaAutosize from 'react-textarea-autosize';
 import RichTextEditor from '../components/RichTextEditor';
 import { ArrowLeft, Plus, Info } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { GoogleGenAI } from '@google/genai';
 
 import FileManager from '../components/FileManager';
 import ImagePickerModal from '../components/ImagePickerModal';
@@ -42,8 +41,12 @@ interface DiaryEntry {
   id?: string;
   title: string;
   content: string;
+  published?: boolean;
   language: 'no' | 'en' | 'both';
   translationId?: string;
+  slug?: string;
+  imageUrl?: string;
+  imageCaption?: string;
 }
 
 export default function Admin() {
@@ -64,6 +67,7 @@ export default function Admin() {
   const [editingDiaryId, setEditingDiaryId] = useState<string | null>(null);
   const [originalDiary, setOriginalDiary] = useState<DiaryEntry | null>(null);
   const [articleFilter, setArticleFilter] = useState('all');
+  const [diaryFilter, setDiaryFilter] = useState('all');
   const [articleForm, setArticleForm] = useState({ title: '', content: '', published: true, language: 'no', slug: '', imageUrl: '', imageCaption: '', translationId: '' });
   const [infoDialog, setInfoDialog] = useState<{title: string, content: React.ReactNode} | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{title: string, message: string, onConfirm: () => void} | null>(null);
@@ -71,7 +75,7 @@ export default function Admin() {
   
   const [bookForm, setBookForm] = useState<Book>({ title: '', description: '', publishedYear: new Date().getFullYear(), coverImageUrl: '', isbn: '', buyLink: '', pageCount: 0, language: 'no', titleEn: '', descriptionEn: '', buyLinkEn: '' });
 
-  const [diaryForm, setDiaryForm] = useState<DiaryEntry>({ title: '', content: '', language: 'both' });
+  const [diaryForm, setDiaryForm] = useState<DiaryEntry>({ title: '', content: '', published: true, language: 'both', slug: '', imageUrl: '', imageCaption: '' });
 
   useEffect(() => {
     if (user) {
@@ -109,7 +113,7 @@ export default function Admin() {
         });
       } else if (params.get('compose_diary') === 'true') {
         setEditingDiaryId(null);
-        setDiaryForm({ title: '', content: '', language: 'both', translationId: '' });
+        setDiaryForm({ title: '', content: '', published: true, language: 'both', translationId: '', slug: '', imageUrl: '', imageCaption: '' });
         setIsComposingDiary(true);
       } else if (params.get('edit_diary')) {
         const editId = params.get('edit_diary')!;
@@ -120,8 +124,12 @@ export default function Admin() {
             setDiaryForm({
               title: data.title || '',
               content: data.content || '',
+              published: data.published ?? true,
               language: data.language || 'both',
-              translationId: data.translationId || ''
+              translationId: data.translationId || '',
+              slug: data.slug || '',
+              imageUrl: data.imageUrl || '',
+              imageCaption: data.imageCaption || ''
             });
             setIsComposingDiary(true);
           }
@@ -179,7 +187,8 @@ export default function Admin() {
       if (articleForm.translationId && newArticleId) {
         // Also update the translated article back to this one
         await updateDoc(doc(db, 'articles', articleForm.translationId), {
-          translationId: newArticleId
+          translationId: newArticleId,
+          updatedAt: serverTimestamp()
         });
       }
 
@@ -216,75 +225,31 @@ export default function Admin() {
     }
   };
 
-  const [isTranslating, setIsTranslating] = useState(false);
-
-  const createTranslation = async (article: Article) => {
+  const createTranslation = (article: Article) => {
     const targetLang = (article.language || 'no') === 'no' ? 'en' : 'no';
+    
+    let translatedCaption = article.imageCaption || '';
+    if (translatedCaption) {
+      if (targetLang === 'en') {
+        translatedCaption = translatedCaption.replace('Bilde av', 'Photo by').replace(' på ', ' on ').replace(' frå ', ' from ');
+      } else {
+        translatedCaption = translatedCaption.replace('Photo by', 'Bilde av').replace(' on ', ' på ').replace(' from ', ' frå ');
+      }
+    }
     
     setEditingArticleId(null);
     setArticleForm({
-      title: 'Omsetter...',
-      content: '<p>Omsetter tekst, vennligst vent...</p>',
+      title: `${article.title} (${targetLang.toUpperCase()})`,
+      content: '', // Let them translate the content manually or could prefill
       published: false,
       language: targetLang,
       slug: '',
       imageUrl: article.imageUrl || '',
-      imageCaption: article.imageCaption ? 'Omsetter...' : '',
+      imageCaption: translatedCaption,
       translationId: article.id
     });
     setOriginalArticle(article);
     setIsComposing(true);
-    setIsTranslating(true);
-
-    try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) throw new Error('VITE_GEMINI_API_KEY mangler i GitHub secrets / miljøvariabler.');
-      
-      const ai = new GoogleGenAI({ apiKey });
-
-      const translateCall = async (text: string, context: string) => {
-        if (!text) return '';
-        const prompt = `You are a professional translator. Translate the following ${context} into ${targetLang === 'en' ? 'English' : 'Norwegian'}. \n\nIMPORTANT: Return ONLY the translated text, preserving any markdown layout or HTML tags if they exist. Do not add any conversational text.\n\nText to translate:\n${text}`;
-        
-        const response = await ai.models.generateContent({
-          model: "gemini-3.5-flash",
-          contents: prompt,
-        });
-
-        return response.text || '';
-      };
-
-      const [translatedTitle, translatedContent, translatedCaption] = await Promise.all([
-        translateCall(article.title, "article title"),
-        translateCall(article.content, "HTML article content"),
-        translateCall(article.imageCaption || '', "image caption")
-      ]);
-
-      setArticleForm({
-        title: translatedTitle,
-        content: translatedContent,
-        published: false,
-        language: targetLang,
-        slug: '',
-        imageUrl: article.imageUrl || '',
-        imageCaption: translatedCaption,
-        translationId: article.id
-      });
-    } catch (e) {
-      console.error("Translation error:", e);
-      setArticleForm({
-        title: `${article.title} (${targetLang.toUpperCase()}) [Feil ved automatisk omsetting]`,
-        content: article.content, // Fallback to original
-        published: false,
-        language: targetLang,
-        slug: '',
-        imageUrl: article.imageUrl || '',
-        imageCaption: article.imageCaption || '',
-        translationId: article.id
-      });
-    } finally {
-      setIsTranslating(false);
-    }
   };
 
   const deleteArticle = async (id: string) => {
@@ -322,35 +287,38 @@ export default function Admin() {
   const saveDiary = async () => {
     if (!user) return;
     try {
+      const diaryData: any = {
+        title: diaryForm.title,
+        content: diaryForm.content,
+        published: diaryForm.published ?? true,
+        language: diaryForm.language,
+        slug: diaryForm.slug || diaryForm.title.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        imageUrl: diaryForm.imageUrl || '',
+        imageCaption: diaryForm.imageCaption || '',
+        translationId: diaryForm.translationId || '',
+        updatedAt: serverTimestamp()
+      };
+
       let newDiaryId = editingDiaryId;
       if (editingDiaryId) {
-         await updateDoc(doc(db, 'diary', editingDiaryId), {
-           title: diaryForm.title,
-           content: diaryForm.content,
-           language: diaryForm.language,
-           translationId: diaryForm.translationId || '',
-           updatedAt: serverTimestamp()
-         });
+         await updateDoc(doc(db, 'diary', editingDiaryId), diaryData);
       } else {
          const docRef = await addDoc(collection(db, 'diary'), {
-           title: diaryForm.title,
-           content: diaryForm.content,
-           language: diaryForm.language,
-           translationId: diaryForm.translationId || '',
+           ...diaryData,
            authorId: user.uid,
            createdAt: serverTimestamp(),
-           updatedAt: serverTimestamp()
          });
          newDiaryId = docRef.id;
       }
       
       if (diaryForm.translationId && newDiaryId) {
         await updateDoc(doc(db, 'diary', diaryForm.translationId), {
-          translationId: newDiaryId
+          translationId: newDiaryId,
+          updatedAt: serverTimestamp()
         });
       }
 
-      setDiaryForm({ title: '', content: '', language: 'both' });
+      setDiaryForm({ title: '', content: '', published: true, language: 'both', slug: '', imageUrl: '', imageCaption: '' });
       setEditingDiaryId(null);
       setOriginalDiary(null);
       setIsComposingDiary(false);
@@ -361,60 +329,21 @@ export default function Admin() {
     }
   };
 
-  const createDiaryTranslation = async (diary: DiaryEntry) => {
+  const createDiaryTranslation = (diary: DiaryEntry) => {
     const targetLang = (diary.language || 'no') === 'no' ? 'en' : 'no';
-    
     setEditingDiaryId(null);
     setDiaryForm({
-      title: diary.title ? 'Omsetter...' : '',
-      content: '<p>Omsetter tekst, vennligst vent...</p>',
+      title: `${diary.title ? diary.title + ' ' : ''}(${targetLang.toUpperCase()})`,
+      content: '', // manual translation
+      published: false,
       language: targetLang,
-      translationId: diary.id
+      translationId: diary.id,
+      slug: '',
+      imageUrl: diary.imageUrl || '',
+      imageCaption: diary.imageCaption || ''
     });
     setOriginalDiary(diary);
     setIsComposingDiary(true);
-    setIsTranslating(true);
-
-    try {
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) throw new Error('VITE_GEMINI_API_KEY mangler i GitHub secrets / miljøvariabler.');
-      
-      const ai = new GoogleGenAI({ apiKey });
-
-      const translateCall = async (text: string, context: string) => {
-        if (!text) return '';
-        const prompt = `You are a professional translator. Translate the following ${context} into ${targetLang === 'en' ? 'English' : 'Norwegian'}. \n\nIMPORTANT: Return ONLY the translated text, preserving any markdown layout or HTML tags if they exist. Do not add any conversational text.\n\nText to translate:\n${text}`;
-        
-        const response = await ai.models.generateContent({
-          model: "gemini-3.5-flash",
-          contents: prompt,
-        });
-
-        return response.text || '';
-      };
-
-      const [translatedTitle, translatedContent] = await Promise.all([
-        translateCall(diary.title, "diary entry title"),
-        translateCall(diary.content, "HTML diary entry content")
-      ]);
-
-      setDiaryForm({
-        title: translatedTitle,
-        content: translatedContent,
-        language: targetLang,
-        translationId: diary.id
-      });
-    } catch (e) {
-      console.error("Translation error:", e);
-      setDiaryForm({
-        title: diary.title ? `${diary.title} (${targetLang.toUpperCase()}) [Feil ved automatisk omsetting]` : '',
-        content: diary.content,
-        language: targetLang,
-        translationId: diary.id
-      });
-    } finally {
-      setIsTranslating(false);
-    }
   };
 
   const deleteDiary = async (id: string) => {
@@ -553,7 +482,7 @@ export default function Admin() {
               {originalArticle.imageUrl && (
                 <div className="w-full mb-8">
                   <img src={originalArticle.imageUrl} className="w-full h-auto max-h-[300px] object-cover rounded-sm" />
-                  {originalArticle.imageCaption && <p className="text-sm text-center text-brand-muted mt-2 italic">{originalArticle.imageCaption}</p>}
+                  {originalArticle.imageCaption && <p className="text-sm text-center text-brand-muted mt-2 italic" dangerouslySetInnerHTML={{ __html: originalArticle.imageCaption }} />}
                 </div>
               )}
               <div className="prose prose-lg brand-prose max-w-none pb-12" dangerouslySetInnerHTML={{ __html: originalArticle.content }} />
@@ -704,6 +633,23 @@ export default function Admin() {
               </select>
             </div>
             
+            <div className="flex items-center gap-1 group">
+              <label className="flex items-center space-x-2 text-xs font-medium tracking-widest uppercase cursor-pointer">
+                <input type="checkbox" checked={diaryForm.published} onChange={e => setDiaryForm({...diaryForm, published: e.target.checked})} className="accent-brand-accent w-3 h-3" />
+                <span>{diaryForm.published ? 'Publisert' : 'Utkast'}</span>
+              </label>
+              <button 
+                onClick={() => setInfoDialog({
+                  title: 'Publiseringsstatus',
+                  content: <p>Dersom <strong>Utkast</strong> er valt, vil oppslaget berre vere synleg her i kontrollpanelet. Set han til <strong>Publisert</strong> for å gjere han synleg i dagboka.</p>
+                })} 
+                className="text-gray-300 hover:text-brand-dark transition-colors mr-3 md:mr-4"
+                title="Informasjon om status"
+              >
+                <Info className="w-4 h-4" />
+              </button>
+            </div>
+            
             <button onClick={saveDiary} className="px-6 py-2.5 bg-brand-dark text-white text-xs font-semibold tracking-widest hover:bg-black transition-colors">
               {editingDiaryId ? 'OPPDATER' : 'PUBLISER I DAGBOK'}
             </button>
@@ -744,6 +690,12 @@ export default function Admin() {
               <h1 className="w-full text-4xl md:text-5xl font-serif text-brand-dark mb-8 leading-tight">
                 {originalDiary.title || 'Uten tittel'}
               </h1>
+              {originalDiary.imageUrl && (
+                <div className="w-full mb-8">
+                  <img src={originalDiary.imageUrl} className="w-full h-auto max-h-[300px] object-cover rounded-sm" />
+                  {originalDiary.imageCaption && <p className="text-sm text-center text-brand-muted mt-2 italic" dangerouslySetInnerHTML={{ __html: originalDiary.imageCaption }} />}
+                </div>
+              )}
               <div className="prose prose-lg brand-prose max-w-none pb-12" dangerouslySetInnerHTML={{ __html: originalDiary.content }} />
             </div>
           )}
@@ -754,6 +706,31 @@ export default function Admin() {
                 Omsetting ({diaryForm.language === 'en' ? 'Engelsk' : diaryForm.language === 'both' ? 'Begge' : 'Norsk'})
               </div>
             )}
+            <div className="flex items-center gap-2 mb-4 w-full group">
+              <input 
+                type="text" 
+                placeholder="Eigendefinert slug (valfritt)" 
+                value={diaryForm.slug || ''} 
+                onChange={e => setDiaryForm({...diaryForm, slug: e.target.value})}
+                className="w-full text-xs font-sans text-brand-muted placeholder:text-gray-300 border-none outline-none focus:ring-0 bg-transparent"
+              />
+              <button 
+                onClick={() => setInfoDialog({
+                  title: 'Kva er ein URL-slug for dagboka?',
+                  content: (
+                    <>
+                      <p>Ein <strong>slug</strong> er den delen av ei nettadresse (URL) som identifiserer akkurat di side i ei leseleg form.</p>
+                      <p>Når du lagar eit oppslag, blir sluggen automatisk generert basert på tittelen. Du kan endre han no for å gjere lenka kortare.</p>
+                    </>
+                  )
+                })} 
+                className="text-gray-300 hover:text-brand-dark transition-colors"
+                title="Informasjon om URL-slug"
+              >
+                <Info className="w-4 h-4" />
+              </button>
+            </div>
+             
             <TextareaAutosize 
               placeholder="Tittel (valfritt)" 
               value={diaryForm.title}
@@ -761,9 +738,57 @@ export default function Admin() {
               className="w-full text-4xl md:text-5xl lg:text-6xl font-serif text-brand-dark placeholder:text-gray-200 mb-8 border-none outline-none focus:ring-0 resize-none bg-transparent leading-tight"
             />
             
+            {diaryForm.imageUrl ? (
+              <div className="w-full mb-12 relative group rounded-md">
+                <div className="w-full h-[40vh] min-h-[300px] bg-brand-sand overflow-hidden relative">
+                  <img loading="lazy" src={diaryForm.imageUrl} alt="Cover" className="w-full h-full object-cover" />
+                  <button 
+                    onClick={() => setDiaryForm({...diaryForm, imageUrl: '', imageCaption: ''})} 
+                    className="absolute top-4 right-4 bg-black/60 text-white px-3 py-1.5 text-xs font-semibold tracking-widest uppercase rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
+                  >
+                    Fjern bilde
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 mt-2 w-full max-w-lg mx-auto group relative">
+                  <div 
+                    contentEditable
+                    suppressContentEditableWarning
+                    onBlur={e => setDiaryForm({...diaryForm, imageCaption: e.currentTarget.innerHTML})}
+                    className="w-full text-sm text-center text-brand-muted bg-transparent border-none outline-none focus:ring-0 placeholder:text-gray-300 italic pr-8 empty:before:content-['Bilettekst_(valfritt)'] empty:before:text-gray-300 focus:empty:before:content-['']"
+                    dangerouslySetInnerHTML={{ __html: diaryForm.imageCaption || '' }}
+                  />
+                  <button 
+                    onClick={() => setInfoDialog({
+                      title: 'Bilettekst',
+                      content: <p>Biletteksten vil bli synt fram under biletet. Dette er ikkje berre nyttig for lesaren, men bidreg også til betre tilgjenge (universell utforming) og søkemotorverdi (SEO).</p>
+                    })} 
+                    className="text-gray-300 hover:text-brand-dark transition-colors absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100"
+                    title="Informasjon om bilettekst"
+                  >
+                    <Info className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="mb-12 border border-dashed border-gray-300 rounded-md p-6 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-gray-50 transition-colors"
+                   onClick={() => setShowImagePicker(true)}>
+                <span className="text-sm font-semibold tracking-widest uppercase text-brand-muted">Legg til hovudbilde</span>
+              </div>
+            )}
+
             <div className="flex-grow w-full">
               <RichTextEditor content={diaryForm.content} onChange={c => setDiaryForm({...diaryForm, content: c})} />
             </div>
+
+            {showImagePicker && (
+              <ImagePickerModal 
+                language={diaryForm.language}
+                onClose={() => setShowImagePicker(false)} 
+                onSelect={(url, caption) => {
+                  setDiaryForm({...diaryForm, imageUrl: url, imageCaption: caption || diaryForm.imageCaption});
+                }}
+              />
+            )}
           </div>
         </main>
       </div>
@@ -776,6 +801,14 @@ export default function Admin() {
     if (articleFilter === 'en') return a.language === 'en';
     if (articleFilter === 'draft') return !a.published;
     if (articleFilter === 'published') return a.published;
+    return true;
+  });
+
+  const filteredDiaries = diaries.filter(d => {
+    if (diaryFilter === 'no') return d.language !== 'en';
+    if (diaryFilter === 'en') return d.language === 'en';
+    if (diaryFilter === 'draft') return !d.published;
+    if (diaryFilter === 'published') return d.published;
     return true;
   });
 
@@ -1105,6 +1138,13 @@ export default function Admin() {
                       <Info className="w-4 h-4" />
                     </button>
                   </div>
+                  <div className="flex flex-wrap gap-2 mt-4 md:mt-0">
+                    <button onClick={() => setDiaryFilter('all')} className={`text-[10px] md:text-xs font-semibold tracking-widest px-3 py-1.5 uppercase transition-colors ${diaryFilter === 'all' ? 'bg-brand-dark text-white' : 'bg-gray-100 text-brand-dark hover:bg-gray-200'}`}>Alle</button>
+                    <button onClick={() => setDiaryFilter('no')} className={`text-[10px] md:text-xs font-semibold tracking-widest px-3 py-1.5 uppercase transition-colors ${diaryFilter === 'no' ? 'bg-brand-dark text-white' : 'bg-gray-100 text-brand-dark hover:bg-gray-200'}`}>No</button>
+                    <button onClick={() => setDiaryFilter('en')} className={`text-[10px] md:text-xs font-semibold tracking-widest px-3 py-1.5 uppercase transition-colors ${diaryFilter === 'en' ? 'bg-brand-dark text-white' : 'bg-gray-100 text-brand-dark hover:bg-gray-200'}`}>En</button>
+                    <button onClick={() => setDiaryFilter('published')} className={`text-[10px] md:text-xs font-semibold tracking-widest px-3 py-1.5 uppercase transition-colors hidden sm:block ${diaryFilter === 'published' ? 'bg-brand-dark text-white' : 'bg-gray-100 text-brand-dark hover:bg-gray-200'}`}>Publisert</button>
+                    <button onClick={() => setDiaryFilter('draft')} className={`text-[10px] md:text-xs font-semibold tracking-widest px-3 py-1.5 uppercase transition-colors hidden sm:block ${diaryFilter === 'draft' ? 'bg-brand-dark text-white' : 'bg-gray-100 text-brand-dark hover:bg-gray-200'}`}>Utkast</button>
+                  </div>
                 </div>
                 <button 
                   onClick={() => {
@@ -1122,19 +1162,28 @@ export default function Admin() {
                     <tr className="bg-gray-50 border-b border-gray-100 text-[10px] uppercase tracking-widest text-brand-muted font-semibold">
                       <th className="p-4 font-semibold">Tittel</th>
                       <th className="p-4 font-semibold w-24">Språk</th>
+                      <th className="p-4 font-semibold w-24">Status</th>
                       <th className="p-4 font-semibold w-32 text-right">Handlingar</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {diaries.map(entry => (
+                    {filteredDiaries.map(entry => (
                       <tr key={entry.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors group">
                         <td className="p-4">
-                          <div className="font-semibold text-sm mb-1">{entry.title || 'Uten tittel'}</div>
+                          <div className="font-semibold text-sm mb-1">
+                            {entry.title || 'Uten tittel'}
+                            {entry.imageUrl && <span className="text-[10px] text-brand-muted ml-2 bg-gray-100 px-1.5 py-0.5 rounded tracking-wider relative -top-[1px]">BLD</span>}
+                          </div>
                           <div className="text-xs text-gray-400 line-clamp-1" dangerouslySetInnerHTML={{ __html: entry.content.replace(/<img[^>]*>|<figure[^>]*>.*?<\/figure>|<figcaption[^>]*>.*?<\/figcaption>/ig, '') }} />
                         </td>
                         <td className="p-4">
                           <span className="text-[10px] font-semibold text-brand-accent bg-brand-accent/10 px-2 py-1 rounded-sm uppercase tracking-widest">
                             {entry.language === 'both' ? 'Begge' : entry.language === 'en' ? 'Engelsk' : 'Norsk'}
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          <span className={`px-2 py-1 text-[10px] uppercase tracking-widest font-semibold rounded-sm inline-flex items-center gap-1 ${entry.published !== false ? 'bg-brand-dark text-white' : 'bg-amber-100 text-amber-800'}`}>
+                            {entry.published !== false ? 'Publisert' : 'Utkast'}
                           </span>
                         </td>
                         <td className="p-4 text-right space-x-3">
@@ -1146,9 +1195,9 @@ export default function Admin() {
                         </td>
                       </tr>
                     ))}
-                    {diaries.length === 0 && (
+                    {filteredDiaries.length === 0 && (
                       <tr>
-                        <td colSpan={3} className="p-8 text-center text-sm text-brand-muted">Ingen dagbokoppslag lagt til enno.</td>
+                        <td colSpan={4} className="p-8 text-center text-sm text-brand-muted">Ingen dagbokoppslag lagt til enno.</td>
                       </tr>
                     )}
                   </tbody>
@@ -1157,15 +1206,21 @@ export default function Admin() {
 
               {/* Mobile View */}
               <div className="md:hidden space-y-3">
-                {diaries.map(entry => (
+                {filteredDiaries.map(entry => (
                   <div key={entry.id} className="p-4 border border-gray-100 flex justify-between items-start bg-white shadow-sm group">
                     <div className="pr-4 flex-grow">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="text-[10px] font-semibold text-brand-accent bg-brand-accent/10 px-2 py-0.5 rounded-sm uppercase tracking-widest">
                           {entry.language === 'both' ? 'Begge' : entry.language === 'en' ? 'Engelsk' : 'Norsk'}
                         </span>
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-sm uppercase tracking-widest ${entry.published !== false ? 'bg-brand-dark text-white' : 'bg-amber-100 text-amber-800'}`}>
+                          {entry.published !== false ? 'PUB' : 'UTKAST'}
+                        </span>
                       </div>
-                      <h3 className="font-semibold text-sm">{entry.title || 'Uten tittel'}</h3>
+                      <h3 className="font-semibold text-sm">
+                        {entry.title || 'Uten tittel'}
+                        {entry.imageUrl && <span className="text-[10px] text-brand-muted ml-2 bg-gray-100 px-1.5 py-0.5 rounded tracking-wider relative -top-[1px] inline-block">BLD</span>}
+                      </h3>
                       <p className="text-xs text-gray-500 mt-1 line-clamp-2" dangerouslySetInnerHTML={{ __html: entry.content.replace(/<img[^>]*>|<figure[^>]*>.*?<\/figure>|<figcaption[^>]*>.*?<\/figcaption>/ig, '') }} />
                     </div>
                     <div className="flex flex-col gap-2 shrink-0 items-end">
