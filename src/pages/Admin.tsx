@@ -6,6 +6,7 @@ import TextareaAutosize from 'react-textarea-autosize';
 import RichTextEditor from '../components/RichTextEditor';
 import { ArrowLeft, Plus, Info } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { GoogleGenAI } from '@google/genai';
 
 import FileManager from '../components/FileManager';
 import ImagePickerModal from '../components/ImagePickerModal';
@@ -42,6 +43,7 @@ interface DiaryEntry {
   title: string;
   content: string;
   language: 'no' | 'en' | 'both';
+  translationId?: string;
 }
 
 export default function Admin() {
@@ -58,7 +60,9 @@ export default function Admin() {
   const [showImagePicker, setShowImagePicker] = useState(false);
   const [showBookImagePicker, setShowBookImagePicker] = useState(false);
   const [editingArticleId, setEditingArticleId] = useState<string | null>(null);
+  const [originalArticle, setOriginalArticle] = useState<Article | null>(null);
   const [editingDiaryId, setEditingDiaryId] = useState<string | null>(null);
+  const [originalDiary, setOriginalDiary] = useState<DiaryEntry | null>(null);
   const [articleFilter, setArticleFilter] = useState('all');
   const [articleForm, setArticleForm] = useState({ title: '', content: '', published: true, language: 'no', slug: '', imageUrl: '', imageCaption: '', translationId: '' });
   const [infoDialog, setInfoDialog] = useState<{title: string, content: React.ReactNode} | null>(null);
@@ -105,7 +109,7 @@ export default function Admin() {
         });
       } else if (params.get('compose_diary') === 'true') {
         setEditingDiaryId(null);
-        setDiaryForm({ title: '', content: '', language: 'both' });
+        setDiaryForm({ title: '', content: '', language: 'both', translationId: '' });
         setIsComposingDiary(true);
       } else if (params.get('edit_diary')) {
         const editId = params.get('edit_diary')!;
@@ -116,7 +120,8 @@ export default function Admin() {
             setDiaryForm({
               title: data.title || '',
               content: data.content || '',
-              language: data.language || 'both'
+              language: data.language || 'both',
+              translationId: data.translationId || ''
             });
             setIsComposingDiary(true);
           }
@@ -180,6 +185,7 @@ export default function Admin() {
 
       setArticleForm({ title: '', content: '', published: true, language: 'no', slug: '', imageUrl: '', imageCaption: '', translationId: '' });
       setEditingArticleId(null);
+      setOriginalArticle(null);
       setIsComposing(false);
       navigate('/admin');
       loadData();
@@ -210,20 +216,75 @@ export default function Admin() {
     }
   };
 
-  const createTranslation = (article: Article) => {
+  const [isTranslating, setIsTranslating] = useState(false);
+
+  const createTranslation = async (article: Article) => {
     const targetLang = (article.language || 'no') === 'no' ? 'en' : 'no';
+    
     setEditingArticleId(null);
     setArticleForm({
-      title: `${article.title} (${targetLang.toUpperCase()})`,
-      content: '', // Let them translate the content manually or could prefill
+      title: 'Omsetter...',
+      content: '<p>Omsetter tekst, vennligst vent...</p>',
       published: false,
       language: targetLang,
       slug: '',
       imageUrl: article.imageUrl || '',
-      imageCaption: article.imageCaption || '',
+      imageCaption: article.imageCaption ? 'Omsetter...' : '',
       translationId: article.id
     });
+    setOriginalArticle(article);
     setIsComposing(true);
+    setIsTranslating(true);
+
+    try {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) throw new Error('VITE_GEMINI_API_KEY mangler i GitHub secrets / miljøvariabler.');
+      
+      const ai = new GoogleGenAI({ apiKey });
+
+      const translateCall = async (text: string, context: string) => {
+        if (!text) return '';
+        const prompt = `You are a professional translator. Translate the following ${context} into ${targetLang === 'en' ? 'English' : 'Norwegian'}. \n\nIMPORTANT: Return ONLY the translated text, preserving any markdown layout or HTML tags if they exist. Do not add any conversational text.\n\nText to translate:\n${text}`;
+        
+        const response = await ai.models.generateContent({
+          model: "gemini-3.5-flash",
+          contents: prompt,
+        });
+
+        return response.text || '';
+      };
+
+      const [translatedTitle, translatedContent, translatedCaption] = await Promise.all([
+        translateCall(article.title, "article title"),
+        translateCall(article.content, "HTML article content"),
+        translateCall(article.imageCaption || '', "image caption")
+      ]);
+
+      setArticleForm({
+        title: translatedTitle,
+        content: translatedContent,
+        published: false,
+        language: targetLang,
+        slug: '',
+        imageUrl: article.imageUrl || '',
+        imageCaption: translatedCaption,
+        translationId: article.id
+      });
+    } catch (e) {
+      console.error("Translation error:", e);
+      setArticleForm({
+        title: `${article.title} (${targetLang.toUpperCase()}) [Feil ved automatisk omsetting]`,
+        content: article.content, // Fallback to original
+        published: false,
+        language: targetLang,
+        slug: '',
+        imageUrl: article.imageUrl || '',
+        imageCaption: article.imageCaption || '',
+        translationId: article.id
+      });
+    } finally {
+      setIsTranslating(false);
+    }
   };
 
   const deleteArticle = async (id: string) => {
@@ -261,28 +322,98 @@ export default function Admin() {
   const saveDiary = async () => {
     if (!user) return;
     try {
+      let newDiaryId = editingDiaryId;
       if (editingDiaryId) {
          await updateDoc(doc(db, 'diary', editingDiaryId), {
            title: diaryForm.title,
            content: diaryForm.content,
            language: diaryForm.language,
+           translationId: diaryForm.translationId || '',
            updatedAt: serverTimestamp()
          });
       } else {
-         await addDoc(collection(db, 'diary'), {
+         const docRef = await addDoc(collection(db, 'diary'), {
            title: diaryForm.title,
            content: diaryForm.content,
            language: diaryForm.language,
+           translationId: diaryForm.translationId || '',
            authorId: user.uid,
            createdAt: serverTimestamp(),
            updatedAt: serverTimestamp()
          });
+         newDiaryId = docRef.id;
       }
+      
+      if (diaryForm.translationId && newDiaryId) {
+        await updateDoc(doc(db, 'diary', diaryForm.translationId), {
+          translationId: newDiaryId
+        });
+      }
+
+      setDiaryForm({ title: '', content: '', language: 'both' });
+      setEditingDiaryId(null);
+      setOriginalDiary(null);
       setIsComposingDiary(false);
       navigate('/admin?tab=diary');
       loadData();
     } catch (e) {
       console.error("Feil ved lagring av dagbok. Er du sikker på at du er administrator? Error:", e);
+    }
+  };
+
+  const createDiaryTranslation = async (diary: DiaryEntry) => {
+    const targetLang = (diary.language || 'no') === 'no' ? 'en' : 'no';
+    
+    setEditingDiaryId(null);
+    setDiaryForm({
+      title: diary.title ? 'Omsetter...' : '',
+      content: '<p>Omsetter tekst, vennligst vent...</p>',
+      language: targetLang,
+      translationId: diary.id
+    });
+    setOriginalDiary(diary);
+    setIsComposingDiary(true);
+    setIsTranslating(true);
+
+    try {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) throw new Error('VITE_GEMINI_API_KEY mangler i GitHub secrets / miljøvariabler.');
+      
+      const ai = new GoogleGenAI({ apiKey });
+
+      const translateCall = async (text: string, context: string) => {
+        if (!text) return '';
+        const prompt = `You are a professional translator. Translate the following ${context} into ${targetLang === 'en' ? 'English' : 'Norwegian'}. \n\nIMPORTANT: Return ONLY the translated text, preserving any markdown layout or HTML tags if they exist. Do not add any conversational text.\n\nText to translate:\n${text}`;
+        
+        const response = await ai.models.generateContent({
+          model: "gemini-3.5-flash",
+          contents: prompt,
+        });
+
+        return response.text || '';
+      };
+
+      const [translatedTitle, translatedContent] = await Promise.all([
+        translateCall(diary.title, "diary entry title"),
+        translateCall(diary.content, "HTML diary entry content")
+      ]);
+
+      setDiaryForm({
+        title: translatedTitle,
+        content: translatedContent,
+        language: targetLang,
+        translationId: diary.id
+      });
+    } catch (e) {
+      console.error("Translation error:", e);
+      setDiaryForm({
+        title: diary.title ? `${diary.title} (${targetLang.toUpperCase()}) [Feil ved automatisk omsetting]` : '',
+        content: diary.content,
+        language: targetLang,
+        translationId: diary.id
+      });
+    } finally {
+      setIsTranslating(false);
     }
   };
 
@@ -319,7 +450,7 @@ export default function Admin() {
       <div className="min-h-screen bg-white font-sans flex flex-col">
         <header className="px-6 py-4 border-b flex justify-between items-center bg-white sticky top-0 z-50">
           <button 
-            onClick={() => { setIsComposing(false); navigate('/admin'); }} 
+            onClick={() => { setIsComposing(false); setOriginalArticle(null); navigate('/admin'); }} 
             className="text-xs font-semibold tracking-widest text-brand-muted hover:text-brand-dark flex items-center shrink-0"
           >
             <ArrowLeft className="w-4 h-4 mr-2" /> KONTROLLPANEL
@@ -384,34 +515,8 @@ export default function Admin() {
           </div>
         </header>
         
-        <main className="flex-grow max-w-3xl mx-auto w-full px-6 py-12 flex flex-col relative">
+        <main className={`flex-grow w-full py-12 relative flex ${originalArticle ? 'max-w-[1600px] px-8 mx-auto gap-12' : 'max-w-3xl px-6 mx-auto flex-col'}`}>
           
-          <div className="flex items-center gap-2 mb-4 w-full group">
-            <input 
-              type="text" 
-              placeholder="Eigendefinert slug (valfritt)" 
-              value={articleForm.slug} 
-              onChange={e => setArticleForm({...articleForm, slug: e.target.value})}
-              className="w-full text-xs font-sans text-brand-muted placeholder:text-gray-300 border-none outline-none focus:ring-0 bg-transparent"
-            />
-            <button 
-              onClick={() => setInfoDialog({
-                title: 'Kva er ein URL-slug?',
-                content: (
-                  <>
-                    <p>Ein <strong>slug</strong> er den delen av ei nettadresse (URL) som identifiserer akkurat di side i ei leseleg form.</p>
-                    <p><strong>Kvifor vere varsam med å endre han?</strong><br/>Når du lagar ein artikkel, blir sluggen automatisk generert basert på tittelen. Dersom du endrar sluggen <em>etter</em> at artikkelen er publisert og delt, vil gamle lenkjer til artikkelen slutte å verke, og du vil tape eventuell søkemotorverdi (SEO) han har opparbeidd seg.</p>
-                    <p><strong>Når bør du endre han?</strong><br/>Du bør berre setje ein eigendefinert slug den aller første gongen du lagar artikkelen, for å gjere han kortare eller meir målretta.</p>
-                  </>
-                )
-              })} 
-              className="text-gray-300 hover:text-brand-dark transition-colors"
-              title="Informasjon om URL-slug"
-            >
-              <Info className="w-4 h-4" />
-            </button>
-          </div>
-
           {infoDialog && (
             <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4">
               <div className="bg-brand-surface w-full max-w-md rounded-sm p-8 relative shadow-2xl">
@@ -436,64 +541,116 @@ export default function Admin() {
               </div>
             </div>
           )}
-           
-          <TextareaAutosize 
-            placeholder="Artikkeltittel" 
-            value={articleForm.title}
-            onChange={e => setArticleForm({...articleForm, title: e.target.value})}
-            className="w-full text-4xl md:text-5xl lg:text-6xl font-serif text-brand-dark placeholder:text-gray-200 mb-8 border-none outline-none focus:ring-0 resize-none bg-transparent leading-tight"
-          />
-          
-          {articleForm.imageUrl ? (
-            <div className="w-full mb-12 relative group rounded-md">
-              <div className="w-full h-[40vh] min-h-[300px] bg-brand-sand overflow-hidden relative">
-                <img loading="lazy" src={articleForm.imageUrl} alt="Cover" className="w-full h-full object-cover" />
-                <button 
-                  onClick={() => setArticleForm({...articleForm, imageUrl: '', imageCaption: ''})} 
-                  className="absolute top-4 right-4 bg-black/60 text-white px-3 py-1.5 text-xs font-semibold tracking-widest uppercase rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
-                >
-                  Fjern bilde
-                </button>
+
+          {originalArticle && (
+            <div className="w-1/2 flex flex-col border-r border-gray-200 pr-12 overflow-y-auto max-h-[calc(100vh-140px)] sticky top-[88px] opacity-70 hover:opacity-100 transition-opacity">
+              <div className="text-xs font-semibold tracking-widest text-brand-accent uppercase mb-4 sticky top-0 bg-white py-2 z-10 border-b border-gray-100">
+                Originalversjon ({originalArticle.language === 'en' ? 'Engelsk' : 'Norsk'})
               </div>
-              <div className="flex items-center gap-2 mt-2 w-full max-w-lg mx-auto group relative">
-                <input 
-                  type="text" 
-                  placeholder="Bilettekst (valfritt)" 
-                  value={articleForm.imageCaption}
-                  onChange={e => setArticleForm({...articleForm, imageCaption: e.target.value})}
-                  className="w-full text-sm text-center text-brand-muted bg-transparent border-none outline-none focus:ring-0 placeholder:text-gray-300 italic pr-8"
-                />
-                <button 
-                  onClick={() => setInfoDialog({
-                    title: 'Bilettekst',
-                    content: <p>Biletteksten vil bli synt fram under biletet. Dette er ikkje berre nyttig for lesaren, men bidreg også til betre tilgjenge (universell utforming) og søkemotorverdi (SEO).</p>
-                  })} 
-                  className="text-gray-300 hover:text-brand-dark transition-colors absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100"
-                  title="Informasjon om bilettekst"
-                >
-                  <Info className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="mb-12 border border-dashed border-gray-300 rounded-md p-6 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-gray-50 transition-colors"
-                 onClick={() => setShowImagePicker(true)}>
-              <span className="text-sm font-semibold tracking-widest uppercase text-brand-muted">Legg til hovudbilde</span>
+              <h1 className="w-full text-4xl md:text-5xl font-serif text-brand-dark mb-8 leading-tight">
+                {originalArticle.title}
+              </h1>
+              {originalArticle.imageUrl && (
+                <div className="w-full mb-8">
+                  <img src={originalArticle.imageUrl} className="w-full h-auto max-h-[300px] object-cover rounded-sm" />
+                  {originalArticle.imageCaption && <p className="text-sm text-center text-brand-muted mt-2 italic">{originalArticle.imageCaption}</p>}
+                </div>
+              )}
+              <div className="prose prose-lg brand-prose max-w-none pb-12" dangerouslySetInnerHTML={{ __html: originalArticle.content }} />
             </div>
           )}
 
-          <div className="flex-grow w-full">
-            <RichTextEditor content={articleForm.content} onChange={c => setArticleForm({...articleForm, content: c})} />
-          </div>
-
-          {showImagePicker && (
-            <ImagePickerModal 
-              onClose={() => setShowImagePicker(false)} 
-              onSelect={(url, caption) => {
-                setArticleForm({...articleForm, imageUrl: url, imageCaption: caption || articleForm.imageCaption});
-              }}
+          <div className={originalArticle ? "w-1/2 flex flex-col min-w-0" : "flex flex-col w-full"}>
+            {originalArticle && (
+              <div className="text-xs font-semibold tracking-widest text-brand-dark uppercase mb-4 sticky top-0 bg-white py-2 z-10 border-b border-gray-100">
+                Omsetting ({articleForm.language === 'en' ? 'Engelsk' : 'Norsk'})
+              </div>
+            )}
+            <div className="flex items-center gap-2 mb-4 w-full group">
+              <input 
+                type="text" 
+                placeholder="Eigendefinert slug (valfritt)" 
+                value={articleForm.slug} 
+                onChange={e => setArticleForm({...articleForm, slug: e.target.value})}
+                className="w-full text-xs font-sans text-brand-muted placeholder:text-gray-300 border-none outline-none focus:ring-0 bg-transparent"
+              />
+              <button 
+                onClick={() => setInfoDialog({
+                  title: 'Kva er ein URL-slug?',
+                  content: (
+                    <>
+                      <p>Ein <strong>slug</strong> er den delen av ei nettadresse (URL) som identifiserer akkurat di side i ei leseleg form.</p>
+                      <p><strong>Kvifor vere varsam med å endre han?</strong><br/>Når du lagar ein artikkel, blir sluggen automatisk generert basert på tittelen. Dersom du endrar sluggen <em>etter</em> at artikkelen er publisert og delt, vil gamle lenkjer til artikkelen slutte å verke, og du vil tape eventuell søkemotorverdi (SEO) han har opparbeidd seg.</p>
+                      <p><strong>Når bør du endre han?</strong><br/>Du bør berre setje ein eigendefinert slug den aller første gongen du lagar artikkelen, for å gjere han kortare eller meir målretta.</p>
+                    </>
+                  )
+                })} 
+                className="text-gray-300 hover:text-brand-dark transition-colors"
+                title="Informasjon om URL-slug"
+              >
+                <Info className="w-4 h-4" />
+              </button>
+            </div>
+             
+            <TextareaAutosize 
+              placeholder="Artikkeltittel" 
+              value={articleForm.title}
+              onChange={e => setArticleForm({...articleForm, title: e.target.value})}
+              className="w-full text-4xl md:text-5xl lg:text-6xl font-serif text-brand-dark placeholder:text-gray-200 mb-8 border-none outline-none focus:ring-0 resize-none bg-transparent leading-tight"
             />
-          )}
+            
+            {articleForm.imageUrl ? (
+              <div className="w-full mb-12 relative group rounded-md">
+                <div className="w-full h-[40vh] min-h-[300px] bg-brand-sand overflow-hidden relative">
+                  <img loading="lazy" src={articleForm.imageUrl} alt="Cover" className="w-full h-full object-cover" />
+                  <button 
+                    onClick={() => setArticleForm({...articleForm, imageUrl: '', imageCaption: ''})} 
+                    className="absolute top-4 right-4 bg-black/60 text-white px-3 py-1.5 text-xs font-semibold tracking-widest uppercase rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
+                  >
+                    Fjern bilde
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 mt-2 w-full max-w-lg mx-auto group relative">
+                  <div 
+                    contentEditable
+                    suppressContentEditableWarning
+                    onBlur={e => setArticleForm({...articleForm, imageCaption: e.currentTarget.innerHTML})}
+                    className="w-full text-sm text-center text-brand-muted bg-transparent border-none outline-none focus:ring-0 placeholder:text-gray-300 italic pr-8 empty:before:content-['Bilettekst_(valfritt)'] empty:before:text-gray-300 focus:empty:before:content-['']"
+                    dangerouslySetInnerHTML={{ __html: articleForm.imageCaption }}
+                  />
+                  <button 
+                    onClick={() => setInfoDialog({
+                      title: 'Bilettekst',
+                      content: <p>Biletteksten vil bli synt fram under biletet. Dette er ikkje berre nyttig for lesaren, men bidreg også til betre tilgjenge (universell utforming) og søkemotorverdi (SEO).</p>
+                    })} 
+                    className="text-gray-300 hover:text-brand-dark transition-colors absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100"
+                    title="Informasjon om bilettekst"
+                  >
+                    <Info className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="mb-12 border border-dashed border-gray-300 rounded-md p-6 flex flex-col items-center justify-center text-center cursor-pointer hover:bg-gray-50 transition-colors"
+                   onClick={() => setShowImagePicker(true)}>
+                <span className="text-sm font-semibold tracking-widest uppercase text-brand-muted">Legg til hovudbilde</span>
+              </div>
+            )}
+
+            <div className="flex-grow w-full">
+              <RichTextEditor content={articleForm.content} onChange={c => setArticleForm({...articleForm, content: c})} />
+            </div>
+
+            {showImagePicker && (
+              <ImagePickerModal 
+                language={articleForm.language}
+                onClose={() => setShowImagePicker(false)} 
+                onSelect={(url, caption) => {
+                  setArticleForm({...articleForm, imageUrl: url, imageCaption: caption || articleForm.imageCaption});
+                }}
+              />
+            )}
+          </div>
         </main>
       </div>
     );
@@ -529,11 +686,22 @@ export default function Admin() {
                   title: 'Språkvalg Dagbok',
                   content: <p>Vel om oppslaget skal vere synleg på både norsk og engelsk, eller berre eitt av språka.</p>
                 })} 
-                className="text-gray-300 hover:text-brand-dark transition-colors"
+                className="text-gray-300 hover:text-brand-dark transition-colors mr-2"
                 title="Informasjon om språk"
               >
                 <Info className="w-4 h-4" />
               </button>
+
+              <select 
+                value={diaryForm.translationId || ''} 
+                onChange={e => setDiaryForm({...diaryForm, translationId: e.target.value})} 
+                className="text-xs border-none focus:ring-0 cursor-pointer text-brand-muted font-medium bg-transparent outline-none max-w-[120px] truncate"
+              >
+                <option value="">Ingen omsetting</option>
+                {diaries.filter(d => d.language !== diaryForm.language && d.id !== editingDiaryId && d.language !== 'both').map(d => (
+                  <option key={d.id} value={d.id}>Lenke til: {d.title || 'Uten tittel'}</option>
+                ))}
+              </select>
             </div>
             
             <button onClick={saveDiary} className="px-6 py-2.5 bg-brand-dark text-white text-xs font-semibold tracking-widest hover:bg-black transition-colors">
@@ -542,7 +710,7 @@ export default function Admin() {
           </div>
         </header>
         
-        <main className="flex-grow max-w-3xl mx-auto w-full px-6 py-12 flex flex-col relative">
+        <main className={`flex-grow w-full py-12 relative flex ${originalDiary ? 'max-w-[1600px] px-8 mx-auto gap-12' : 'max-w-3xl px-6 mx-auto flex-col'}`}>
           {infoDialog && (
             <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4">
               <div className="bg-brand-surface w-full max-w-md rounded-sm p-8 relative shadow-2xl">
@@ -567,15 +735,35 @@ export default function Admin() {
               </div>
             </div>
           )}
-          <TextareaAutosize 
-            placeholder="Tittel (valfritt)" 
-            value={diaryForm.title}
-            onChange={e => setDiaryForm({...diaryForm, title: e.target.value})}
-            className="w-full text-4xl md:text-5xl lg:text-6xl font-serif text-brand-dark placeholder:text-gray-200 mb-8 border-none outline-none focus:ring-0 resize-none bg-transparent leading-tight"
-          />
-          
-          <div className="flex-grow w-full">
-            <RichTextEditor content={diaryForm.content} onChange={c => setDiaryForm({...diaryForm, content: c})} />
+
+          {originalDiary && (
+            <div className="w-1/2 flex flex-col border-r border-gray-200 pr-12 overflow-y-auto max-h-[calc(100vh-140px)] sticky top-[88px] opacity-70 hover:opacity-100 transition-opacity">
+              <div className="text-xs font-semibold tracking-widest text-brand-accent uppercase mb-4 sticky top-0 bg-white py-2 z-10 border-b border-gray-100">
+                Originalversjon ({originalDiary.language === 'en' ? 'Engelsk' : originalDiary.language === 'both' ? 'Begge' : 'Norsk'})
+              </div>
+              <h1 className="w-full text-4xl md:text-5xl font-serif text-brand-dark mb-8 leading-tight">
+                {originalDiary.title || 'Uten tittel'}
+              </h1>
+              <div className="prose prose-lg brand-prose max-w-none pb-12" dangerouslySetInnerHTML={{ __html: originalDiary.content }} />
+            </div>
+          )}
+
+          <div className={originalDiary ? "w-1/2 flex flex-col min-w-0" : "flex flex-col w-full"}>
+            {originalDiary && (
+              <div className="text-xs font-semibold tracking-widest text-brand-dark uppercase mb-4 sticky top-0 bg-white py-2 z-10 border-b border-gray-100">
+                Omsetting ({diaryForm.language === 'en' ? 'Engelsk' : diaryForm.language === 'both' ? 'Begge' : 'Norsk'})
+              </div>
+            )}
+            <TextareaAutosize 
+              placeholder="Tittel (valfritt)" 
+              value={diaryForm.title}
+              onChange={e => setDiaryForm({...diaryForm, title: e.target.value})}
+              className="w-full text-4xl md:text-5xl lg:text-6xl font-serif text-brand-dark placeholder:text-gray-200 mb-8 border-none outline-none focus:ring-0 resize-none bg-transparent leading-tight"
+            />
+            
+            <div className="flex-grow w-full">
+              <RichTextEditor content={diaryForm.content} onChange={c => setDiaryForm({...diaryForm, content: c})} />
+            </div>
           </div>
         </main>
       </div>
@@ -942,7 +1130,7 @@ export default function Admin() {
                       <tr key={entry.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors group">
                         <td className="p-4">
                           <div className="font-semibold text-sm mb-1">{entry.title || 'Uten tittel'}</div>
-                          <div className="text-xs text-gray-400 line-clamp-1" dangerouslySetInnerHTML={{ __html: entry.content }} />
+                          <div className="text-xs text-gray-400 line-clamp-1" dangerouslySetInnerHTML={{ __html: entry.content.replace(/<img[^>]*>|<figure[^>]*>.*?<\/figure>|<figcaption[^>]*>.*?<\/figcaption>/ig, '') }} />
                         </td>
                         <td className="p-4">
                           <span className="text-[10px] font-semibold text-brand-accent bg-brand-accent/10 px-2 py-1 rounded-sm uppercase tracking-widest">
@@ -950,7 +1138,10 @@ export default function Admin() {
                           </span>
                         </td>
                         <td className="p-4 text-right space-x-3">
-                          <button onClick={() => navigate(`/admin?edit_diary=${entry.id}`)} className="text-brand-accent text-xs font-semibold tracking-widest opacity-80 hover:opacity-100 transition-opacity">REDIGER</button>
+                          {!entry.translationId && entry.language !== 'both' && (
+                            <button onClick={() => createDiaryTranslation(entry)} className="text-brand-accent text-xs font-semibold tracking-widest opacity-80 hover:opacity-100 transition-opacity">OMSETT</button>
+                          )}
+                          <button onClick={() => navigate(`/admin?edit_diary=${entry.id}`)} className="text-brand-dark text-xs font-semibold tracking-widest opacity-80 hover:opacity-100 transition-opacity">REDIGER</button>
                           <button onClick={() => deleteDiary(entry.id!)} className="text-red-500 text-xs font-semibold tracking-widest opacity-80 hover:opacity-100 transition-opacity">SLETT</button>
                         </td>
                       </tr>
@@ -975,10 +1166,13 @@ export default function Admin() {
                         </span>
                       </div>
                       <h3 className="font-semibold text-sm">{entry.title || 'Uten tittel'}</h3>
-                      <p className="text-xs text-gray-500 mt-1 line-clamp-2" dangerouslySetInnerHTML={{ __html: entry.content }} />
+                      <p className="text-xs text-gray-500 mt-1 line-clamp-2" dangerouslySetInnerHTML={{ __html: entry.content.replace(/<img[^>]*>|<figure[^>]*>.*?<\/figure>|<figcaption[^>]*>.*?<\/figcaption>/ig, '') }} />
                     </div>
-                    <div className="flex flex-col gap-2 shrink-0">
-                      <button onClick={() => navigate(`/admin?edit_diary=${entry.id}`)} className="text-brand-accent text-[10px] font-semibold md:opacity-0 group-hover:opacity-100 transition-opacity tracking-widest">REDIGER</button>
+                    <div className="flex flex-col gap-2 shrink-0 items-end">
+                      {!entry.translationId && entry.language !== 'both' && (
+                        <button onClick={() => createDiaryTranslation(entry)} className="text-brand-accent text-[10px] font-semibold md:opacity-0 group-hover:opacity-100 transition-opacity tracking-widest">OMSETT</button>
+                      )}
+                      <button onClick={() => navigate(`/admin?edit_diary=${entry.id}`)} className="text-brand-dark text-[10px] font-semibold md:opacity-0 group-hover:opacity-100 transition-opacity tracking-widest">REDIGER</button>
                       <button onClick={() => deleteDiary(entry.id!)} className="text-red-500 text-[10px] font-semibold md:opacity-0 group-hover:opacity-100 transition-opacity tracking-widest">SLETT</button>
                     </div>
                   </div>

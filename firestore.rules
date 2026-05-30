@@ -119,13 +119,13 @@ service cloud.firestore {
     }
 
     function isValidDiary(data) {
-      return data.keys().hasAll(['title', 'content', 'language', 'createdAt', 'updatedAt', 'authorId']) &&
+      return data.keys().hasAll(['title', 'content', 'createdAt', 'updatedAt']) &&
              data.title is string && data.title.size() <= 200 &&
              data.content is string && data.content.size() <= 5000000 &&
-             data.language is string && (data.language == 'no' || data.language == 'en' || data.language == 'both') &&
+             (!('language' in data) || (data.language is string && (data.language == 'no' || data.language == 'en' || data.language == 'both'))) &&
              data.createdAt is timestamp &&
              data.updatedAt is timestamp &&
-             data.authorId is string && data.authorId == request.auth.uid;
+             (!('authorId' in data) || data.authorId is string);
     }
 
     match /diary/{diaryId} {

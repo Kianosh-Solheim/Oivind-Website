@@ -11,7 +11,7 @@ export interface ImageFile {
   createdAt?: any;
 }
 
-export default function FileManager({ onSelect }: { onSelect?: (url: string, caption?: string) => void }) {
+export default function FileManager({ onSelect, language = 'no' }: { onSelect?: (url: string, caption?: string) => void, language?: string }) {
   const { user } = useAuth();
   const [images, setImages] = useState<ImageFile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -287,7 +287,9 @@ export default function FileManager({ onSelect }: { onSelect?: (url: string, cap
                 <div key={img.id} className="break-inside-avoid bg-white border border-gray-100 flex flex-col group relative overflow-hidden cursor-pointer" onClick={() => {
                   const authorLink = img.user?.links?.html ? `<a href="${img.user.links.html}?utm_source=ais_nordic_storyteller&utm_medium=referral" target="_blank" rel="noopener noreferrer" class="underline hover:text-brand-dark">${img.user?.name}</a>` : img.user?.name;
                   const unsplashLink = `<a href="https://unsplash.com/?utm_source=ais_nordic_storyteller&utm_medium=referral" target="_blank" rel="noopener noreferrer" class="underline hover:text-brand-dark">Unsplash</a>`;
-                  const captionStr = `Bilde av ${authorLink} på ${unsplashLink}`;
+                  const prefix = language === 'en' ? 'Photo by' : 'Bilde av';
+                  const suffix = language === 'en' ? 'on' : 'på';
+                  const captionStr = `${prefix} ${authorLink} ${suffix} ${unsplashLink}`;
                   onSelect && onSelect(img.urls.regular, captionStr);
                 }}>
                   <div className="w-full bg-gray-50 flex items-center justify-center overflow-hidden">
@@ -335,9 +337,11 @@ export default function FileManager({ onSelect }: { onSelect?: (url: string, cap
                 
                 return (
                 <div key={img.pageid} className="break-inside-avoid bg-white border border-gray-100 flex flex-col group relative overflow-hidden cursor-pointer" onClick={() => {
-                  const authorLink = info.extmetadata?.Artist?.value ? info.extmetadata.Artist.value : 'Ukjend'; // Some already carry HTML links
+                  const authorLink = info.extmetadata?.Artist?.value ? info.extmetadata.Artist.value : (language === 'en' ? 'Unknown' : 'Ukjend'); // Some already carry HTML links
                   const wikiLink = `<a href="${info.descriptionurl}" target="_blank" rel="noopener noreferrer" class="underline hover:text-brand-dark">Wikimedia Commons</a>`;
-                  const captionStr = `Bilde av ${authorLink} frå ${wikiLink}`;
+                  const prefix = language === 'en' ? 'Photo by' : 'Bilde av';
+                  const suffix = language === 'en' ? 'from' : 'frå';
+                  const captionStr = `${prefix} ${authorLink} ${suffix} ${wikiLink}`;
                   onSelect && onSelect(fileUrl, captionStr);
                 }}>
                   <div className="w-full bg-gray-50 flex items-center justify-center overflow-hidden">
