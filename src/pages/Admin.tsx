@@ -37,6 +37,13 @@ interface Book {
   buyLinkEn?: string;
 }
 
+interface DiaryEntry {
+  id?: string;
+  title: string;
+  content: string;
+  language: 'no' | 'en' | 'both';
+}
+
 export default function Admin() {
   const { user, signInWithGoogle, logout } = useAuth();
   const location = useLocation();
@@ -44,17 +51,23 @@ export default function Admin() {
   
   const [articles, setArticles] = useState<Article[]>([]);
   const [books, setBooks] = useState<Book[]>([]);
+  const [diaries, setDiaries] = useState<DiaryEntry[]>([]);
   
   const [isComposing, setIsComposing] = useState(false);
+  const [isComposingDiary, setIsComposingDiary] = useState(false);
   const [showImagePicker, setShowImagePicker] = useState(false);
   const [showBookImagePicker, setShowBookImagePicker] = useState(false);
   const [editingArticleId, setEditingArticleId] = useState<string | null>(null);
+  const [editingDiaryId, setEditingDiaryId] = useState<string | null>(null);
   const [articleFilter, setArticleFilter] = useState('all');
   const [articleForm, setArticleForm] = useState({ title: '', content: '', published: true, language: 'no', slug: '', imageUrl: '', imageCaption: '', translationId: '' });
   const [infoDialog, setInfoDialog] = useState<{title: string, content: React.ReactNode} | null>(null);
-  const [dashboardTab, setDashboardTab] = useState<'articles' | 'books' | 'files'>('articles');
+  const [confirmDialog, setConfirmDialog] = useState<{title: string, message: string, onConfirm: () => void} | null>(null);
+  const [dashboardTab, setDashboardTab] = useState<'articles' | 'books' | 'diary' | 'files'>('articles');
   
   const [bookForm, setBookForm] = useState<Book>({ title: '', description: '', publishedYear: new Date().getFullYear(), coverImageUrl: '', isbn: '', buyLink: '', pageCount: 0, language: 'no', titleEn: '', descriptionEn: '', buyLinkEn: '' });
+
+  const [diaryForm, setDiaryForm] = useState<DiaryEntry>({ title: '', content: '', language: 'both' });
 
   useEffect(() => {
     if (user) {
@@ -62,8 +75,8 @@ export default function Admin() {
       
       const params = new URLSearchParams(location.search);
       const tabParam = params.get('tab');
-      if (tabParam === 'books' || tabParam === 'files' || tabParam === 'articles') {
-        setDashboardTab(tabParam);
+      if (tabParam === 'books' || tabParam === 'files' || tabParam === 'articles' || tabParam === 'diary') {
+        setDashboardTab(tabParam as any);
       }
       
       if (params.get('compose') === 'true') {
@@ -90,6 +103,24 @@ export default function Admin() {
             setIsComposing(true);
           }
         });
+      } else if (params.get('compose_diary') === 'true') {
+        setEditingDiaryId(null);
+        setDiaryForm({ title: '', content: '', language: 'both' });
+        setIsComposingDiary(true);
+      } else if (params.get('edit_diary')) {
+        const editId = params.get('edit_diary')!;
+        getDoc(doc(db, 'diary', editId)).then(docSnap => {
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setEditingDiaryId(docSnap.id);
+            setDiaryForm({
+              title: data.title || '',
+              content: data.content || '',
+              language: data.language || 'both'
+            });
+            setIsComposingDiary(true);
+          }
+        });
       }
     }
   }, [user, location.search, navigate]);
@@ -101,6 +132,9 @@ export default function Admin() {
 
       const booksSnap = await getDocs(query(collection(db, 'books'), orderBy('createdAt', 'desc')));
       setBooks(booksSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Book)));
+
+      const diariesSnap = await getDocs(query(collection(db, 'diary'), orderBy('createdAt', 'desc')));
+      setDiaries(diariesSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as DiaryEntry)));
     } catch (e) {
       console.error("Failed to load data", e);
     }
@@ -109,7 +143,7 @@ export default function Admin() {
   const saveArticle = async () => {
     if (!user) return;
     if (!articleForm.title || !articleForm.content) {
-      alert("Please provide a title and meaningful content.");
+      console.error("Please provide a title and meaningful content.");
       return;
     }
     try {
@@ -150,8 +184,7 @@ export default function Admin() {
       navigate('/admin');
       loadData();
     } catch (e) {
-      console.error("Error saving article", e);
-      alert("Feil ved lagring av artikkel. Er du sikker på at du er administrator?");
+      console.error("Feil ved lagring av artikkel. Er du sikker på at du er administrator? Error:", e);
     }
   };
 
@@ -173,8 +206,7 @@ export default function Admin() {
       setBookForm({ title: '', description: '', publishedYear: new Date().getFullYear(), coverImageUrl: '', isbn: '', buyLink: '', pageCount: 0, language: 'no', titleEn: '', descriptionEn: '', buyLinkEn: '' });
       loadData();
     } catch (e) {
-      console.error("Error adding book", e);
-      alert("Feil ved lagring av bok. Er du sikker på at du er administrator?");
+      console.error("Feil ved lagring av bok. Er du sikker på at du er administrator? Error:", e);
     }
   };
 
@@ -195,15 +227,79 @@ export default function Admin() {
   };
 
   const deleteArticle = async (id: string) => {
-    if (!confirm('Er du sikker?')) return;
-    await deleteDoc(doc(db, 'articles', id));
-    loadData();
+    setConfirmDialog({
+      title: 'Slett artikkel',
+      message: 'Er du sikker på at du vil slette denne artikkelen?',
+      onConfirm: async () => {
+        try {
+          await deleteDoc(doc(db, 'articles', id));
+          loadData();
+        } catch (e) {
+          console.error(e);
+        }
+        setConfirmDialog(null);
+      }
+    });
   };
 
   const deleteBook = async (id: string) => {
-    if (!confirm('Er du sikker?')) return;
-    await deleteDoc(doc(db, 'books', id));
-    loadData();
+    setConfirmDialog({
+      title: 'Slett bok',
+      message: 'Er du sikker på at du vil slette denne boka?',
+      onConfirm: async () => {
+        try {
+          await deleteDoc(doc(db, 'books', id));
+          loadData();
+        } catch (e) {
+          console.error(e);
+        }
+        setConfirmDialog(null);
+      }
+    });
+  };
+
+  const saveDiary = async () => {
+    if (!user) return;
+    try {
+      if (editingDiaryId) {
+         await updateDoc(doc(db, 'diary', editingDiaryId), {
+           title: diaryForm.title,
+           content: diaryForm.content,
+           language: diaryForm.language,
+           updatedAt: serverTimestamp()
+         });
+      } else {
+         await addDoc(collection(db, 'diary'), {
+           title: diaryForm.title,
+           content: diaryForm.content,
+           language: diaryForm.language,
+           authorId: user.uid,
+           createdAt: serverTimestamp(),
+           updatedAt: serverTimestamp()
+         });
+      }
+      setIsComposingDiary(false);
+      navigate('/admin?tab=diary');
+      loadData();
+    } catch (e) {
+      console.error("Feil ved lagring av dagbok. Er du sikker på at du er administrator? Error:", e);
+    }
+  };
+
+  const deleteDiary = async (id: string) => {
+    setConfirmDialog({
+      title: 'Slett dagbokoppslag',
+      message: 'Er du sikker på at du vil slette dette oppslaget?',
+      onConfirm: async () => {
+        try {
+          await deleteDoc(doc(db, 'diary', id));
+          loadData();
+        } catch (e) {
+          console.error("Feil ved sletting av oppslag. Mangler rettigheter. Error:", e);
+        }
+        setConfirmDialog(null);
+      }
+    });
   };
 
   if (!user) {
@@ -403,6 +499,89 @@ export default function Admin() {
     );
   }
 
+  // --- COMPOSE MODE DIARY ---
+  if (isComposingDiary) {
+    return (
+      <div className="min-h-screen bg-white font-sans flex flex-col">
+        <header className="px-6 py-4 border-b flex justify-between items-center bg-white sticky top-0 z-50">
+          <button 
+            onClick={() => { setIsComposingDiary(false); navigate('/admin?tab=diary'); }} 
+            className="text-xs font-semibold tracking-widest text-brand-muted hover:text-brand-dark flex items-center shrink-0"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" /> KONTROLLPANEL
+          </button>
+          
+          <div id="editor-toolbar-container" className="hidden md:flex flex-grow justify-center mx-4"></div>
+
+          <div className="flex items-center gap-4 md:gap-6 relative shrink-0">
+            <div className="flex items-center gap-1 group">
+              <select 
+                value={diaryForm.language} 
+                onChange={e => setDiaryForm({...diaryForm, language: e.target.value as any})} 
+                className="text-xs border-none focus:ring-0 cursor-pointer text-brand-dark font-medium uppercase tracking-widest bg-transparent outline-none pl-0"
+              >
+                <option value="both">BEGGE</option>
+                <option value="no">NORSK</option>
+                <option value="en">ENGELSK</option>
+              </select>
+              <button 
+                onClick={() => setInfoDialog({
+                  title: 'Språkvalg Dagbok',
+                  content: <p>Vel om oppslaget skal vere synleg på både norsk og engelsk, eller berre eitt av språka.</p>
+                })} 
+                className="text-gray-300 hover:text-brand-dark transition-colors"
+                title="Informasjon om språk"
+              >
+                <Info className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <button onClick={saveDiary} className="px-6 py-2.5 bg-brand-dark text-white text-xs font-semibold tracking-widest hover:bg-black transition-colors">
+              {editingDiaryId ? 'OPPDATER' : 'PUBLISER I DAGBOK'}
+            </button>
+          </div>
+        </header>
+        
+        <main className="flex-grow max-w-3xl mx-auto w-full px-6 py-12 flex flex-col relative">
+          {infoDialog && (
+            <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4">
+              <div className="bg-brand-surface w-full max-w-md rounded-sm p-8 relative shadow-2xl">
+                <button 
+                  onClick={() => setInfoDialog(null)}
+                  className="absolute top-4 right-4 text-brand-muted hover:text-brand-dark"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+                <h3 className="text-xl font-serif mb-4">{infoDialog.title}</h3>
+                <div className="space-y-4 text-sm text-brand-muted leading-relaxed">
+                  {infoDialog.content}
+                </div>
+                <div className="mt-8">
+                  <button 
+                    onClick={() => setInfoDialog(null)}
+                    className="w-full py-3 bg-brand-dark text-white text-xs font-semibold tracking-widest uppercase hover:bg-black transition-colors"
+                  >
+                    Eg forstår
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+          <TextareaAutosize 
+            placeholder="Tittel (valfritt)" 
+            value={diaryForm.title}
+            onChange={e => setDiaryForm({...diaryForm, title: e.target.value})}
+            className="w-full text-4xl md:text-5xl lg:text-6xl font-serif text-brand-dark placeholder:text-gray-200 mb-8 border-none outline-none focus:ring-0 resize-none bg-transparent leading-tight"
+          />
+          
+          <div className="flex-grow w-full">
+            <RichTextEditor content={diaryForm.content} onChange={c => setDiaryForm({...diaryForm, content: c})} />
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   // --- DASHBOARD MODE ---
   const filteredArticles = articles.filter(a => {
     if (articleFilter === 'no') return a.language !== 'en';
@@ -459,6 +638,12 @@ export default function Admin() {
               className={`text-left px-4 py-3 text-xs tracking-widest uppercase font-semibold transition-colors shrink-0 ${dashboardTab === 'books' ? 'bg-brand-dark text-white' : 'text-brand-muted hover:text-brand-dark hover:bg-gray-50'}`}
             >
               Bøker
+            </button>
+            <button 
+              onClick={() => setDashboardTab('diary')} 
+              className={`text-left px-4 py-3 text-xs tracking-widest uppercase font-semibold transition-colors shrink-0 ${dashboardTab === 'diary' ? 'bg-brand-dark text-white' : 'text-brand-muted hover:text-brand-dark hover:bg-gray-50'}`}
+            >
+              Dagbok
             </button>
             <button 
               onClick={() => setDashboardTab('files')} 
@@ -713,6 +898,99 @@ export default function Admin() {
           </section>
           )}
 
+          {/* DIARY MANAGE */}
+          {dashboardTab === 'diary' && (
+          <section className="lg:col-span-9 xl:col-span-10">
+            <div className="max-w-4xl pt-4 lg:pt-8 pr-4 md:pr-8">
+              <div className="flex flex-col md:flex-row md:justify-between md:items-end border-b border-gray-200 pb-4 mb-6 gap-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-3 md:mb-4">
+                    <h2 className="text-2xl font-serif text-brand-dark mb-0">Dagbok</h2>
+                    <button 
+                      onClick={() => setInfoDialog({
+                        title: 'Dagbok',
+                        content: <p>Ei dagbok for kortare form-frie tankar. Visest i si eiga tidsline i grensesnittet. Du kan velje om eit oppslag skal vere på norsk, engelsk, eller synast i begge språkversjonar (Begge).</p>
+                      })} 
+                      className="text-gray-300 hover:text-brand-dark transition-colors"
+                      title="Informasjon om dagbok"
+                    >
+                      <Info className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => {
+                    navigate('/admin?compose_diary=true');
+                  }}
+                  className="flex items-center text-xs font-semibold tracking-widest bg-brand-dark text-white px-5 py-2.5 hover:bg-black transition-colors shrink-0"
+                >
+                  <Plus className="w-4 h-4 mr-2" /> NYTT OPPSLAG
+                </button>
+              </div>
+
+              <div className="bg-white border border-gray-100 shadow-sm rounded-sm overflow-hidden hidden md:block">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100 text-[10px] uppercase tracking-widest text-brand-muted font-semibold">
+                      <th className="p-4 font-semibold">Tittel</th>
+                      <th className="p-4 font-semibold w-24">Språk</th>
+                      <th className="p-4 font-semibold w-32 text-right">Handlingar</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {diaries.map(entry => (
+                      <tr key={entry.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors group">
+                        <td className="p-4">
+                          <div className="font-semibold text-sm mb-1">{entry.title || 'Uten tittel'}</div>
+                          <div className="text-xs text-gray-400 line-clamp-1" dangerouslySetInnerHTML={{ __html: entry.content }} />
+                        </td>
+                        <td className="p-4">
+                          <span className="text-[10px] font-semibold text-brand-accent bg-brand-accent/10 px-2 py-1 rounded-sm uppercase tracking-widest">
+                            {entry.language === 'both' ? 'Begge' : entry.language === 'en' ? 'Engelsk' : 'Norsk'}
+                          </span>
+                        </td>
+                        <td className="p-4 text-right space-x-3">
+                          <button onClick={() => navigate(`/admin?edit_diary=${entry.id}`)} className="text-brand-accent text-xs font-semibold tracking-widest opacity-80 hover:opacity-100 transition-opacity">REDIGER</button>
+                          <button onClick={() => deleteDiary(entry.id!)} className="text-red-500 text-xs font-semibold tracking-widest opacity-80 hover:opacity-100 transition-opacity">SLETT</button>
+                        </td>
+                      </tr>
+                    ))}
+                    {diaries.length === 0 && (
+                      <tr>
+                        <td colSpan={3} className="p-8 text-center text-sm text-brand-muted">Ingen dagbokoppslag lagt til enno.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile View */}
+              <div className="md:hidden space-y-3">
+                {diaries.map(entry => (
+                  <div key={entry.id} className="p-4 border border-gray-100 flex justify-between items-start bg-white shadow-sm group">
+                    <div className="pr-4 flex-grow">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[10px] font-semibold text-brand-accent bg-brand-accent/10 px-2 py-0.5 rounded-sm uppercase tracking-widest">
+                          {entry.language === 'both' ? 'Begge' : entry.language === 'en' ? 'Engelsk' : 'Norsk'}
+                        </span>
+                      </div>
+                      <h3 className="font-semibold text-sm">{entry.title || 'Uten tittel'}</h3>
+                      <p className="text-xs text-gray-500 mt-1 line-clamp-2" dangerouslySetInnerHTML={{ __html: entry.content }} />
+                    </div>
+                    <div className="flex flex-col gap-2 shrink-0">
+                      <button onClick={() => navigate(`/admin?edit_diary=${entry.id}`)} className="text-brand-accent text-[10px] font-semibold md:opacity-0 group-hover:opacity-100 transition-opacity tracking-widest">REDIGER</button>
+                      <button onClick={() => deleteDiary(entry.id!)} className="text-red-500 text-[10px] font-semibold md:opacity-0 group-hover:opacity-100 transition-opacity tracking-widest">SLETT</button>
+                    </div>
+                  </div>
+                ))}
+                {diaries.length === 0 && (
+                  <div className="text-sm text-brand-muted p-4 border border-gray-100 text-center">Ingen dagbokoppslag lagt til enno.</div>
+                )}
+              </div>
+            </div>
+          </section>
+          )}
+
           {/* FILES MANAGE */}
           {dashboardTab === 'files' && (
           <div className="pt-4 lg:pt-8 bg-white md:bg-transparent max-w-5xl">
@@ -742,6 +1020,31 @@ export default function Admin() {
                 setShowBookImagePicker(false);
               }}
             />
+          )}
+
+          {confirmDialog && (
+            <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4">
+              <div className="bg-brand-surface w-full max-w-sm rounded-sm p-8 relative shadow-2xl">
+                <h3 className="text-xl font-serif mb-4 text-brand-dark">{confirmDialog.title}</h3>
+                <p className="text-sm text-brand-muted mb-8 line-clamp-3">
+                  {confirmDialog.message}
+                </p>
+                <div className="flex gap-4">
+                  <button 
+                    onClick={confirmDialog.onConfirm}
+                    className="flex-1 py-3 bg-red-600 text-white text-xs font-semibold tracking-widest uppercase hover:bg-red-700 transition-colors"
+                  >
+                    Slett
+                  </button>
+                  <button 
+                    onClick={() => setConfirmDialog(null)}
+                    className="flex-1 py-3 border border-gray-200 text-brand-muted text-xs font-semibold tracking-widest uppercase hover:bg-gray-50 transition-colors"
+                  >
+                    Avbryt
+                  </button>
+                </div>
+              </div>
+            </div>
           )}
         </main>
       </div>

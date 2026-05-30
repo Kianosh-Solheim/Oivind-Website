@@ -58,6 +58,96 @@ export default function RefleksjonView() {
   const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (!contentRef.current || !activeMarginCommentId) {
+      if ('highlights' in CSS) {
+        (CSS as any).highlights.clear();
+      }
+      return;
+    }
+
+    const comment = comments.find(c => c.id === activeMarginCommentId);
+    if (!comment || !comment.quote) return;
+
+    const el = contentRef.current;
+    
+    // We only search for the first 20 characters of the quote to find a match,
+    // as the quote might cross HTML boundaries in the actual text.
+    const searchStr = comment.quote.substring(0, 20).trim();
+    if (searchStr.length < 5) return;
+
+    const finder = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+    let node: Node | null = null;
+    let matchNode: Text | null = null;
+    let matchIdx = -1;
+    let matchLength = 0;
+
+    while ((node = finder.nextNode())) {
+      if (node.nodeValue?.includes(searchStr)) {
+        matchNode = node as Text;
+        matchIdx = node.nodeValue.indexOf(searchStr);
+        
+        matchLength = searchStr.length;
+        // Try to match as much as possible up to the whole quote in this text node
+        for (let i = searchStr.length; i <= comment.quote.length; i++) {
+           if (node.nodeValue.includes(comment.quote.substring(0, i))) {
+              matchLength = i;
+           } else {
+              break;
+           }
+        }
+        break;
+      }
+    }
+
+    if (!matchNode) return;
+
+    if ('highlights' in CSS) {
+      const range = new Range();
+      range.setStart(matchNode, matchIdx);
+      range.setEnd(matchNode, matchIdx + matchLength);
+      const highlight = new (window as any).Highlight(range);
+      (CSS as any).highlights.set('comment-highlight', highlight);
+      
+      return () => {
+        (CSS as any).highlights.clear();
+      };
+    } else {
+      // Fallback for older browsers
+      const originalText = matchNode.nodeValue || '';
+      const beforeStr = originalText.substring(0, matchIdx);
+      const highlightStr = originalText.substring(matchIdx, matchIdx + matchLength);
+      const afterStr = originalText.substring(matchIdx + matchLength);
+
+      const parent = matchNode.parentNode;
+      if (!parent) return;
+
+      const beforeNode = document.createTextNode(beforeStr);
+      const markNode = document.createElement('mark');
+      markNode.style.backgroundColor = 'rgba(0, 0, 0, 0.1)';
+      markNode.style.borderRadius = '2px';
+      markNode.style.color = 'inherit';
+      markNode.textContent = highlightStr;
+      const afterNode = document.createTextNode(afterStr);
+
+      parent.insertBefore(beforeNode, matchNode);
+      parent.insertBefore(markNode, matchNode);
+      parent.insertBefore(afterNode, matchNode);
+      parent.removeChild(matchNode);
+
+      return () => {
+        if (parent.contains(beforeNode) && parent.contains(markNode) && parent.contains(afterNode)) {
+            const combinedText = beforeNode.nodeValue + (markNode.textContent || '') + (afterNode.nodeValue || '');
+            const newNode = document.createTextNode(combinedText);
+            parent.insertBefore(newNode, beforeNode);
+            parent.removeChild(beforeNode);
+            parent.removeChild(markNode);
+            parent.removeChild(afterNode);
+        }
+      };
+    }
+  }, [activeMarginCommentId, comments]);
+
+  useEffect(() => {
     const handleOutsideClick = (e: MouseEvent | TouchEvent) => {
       const target = e.target as HTMLElement;
       if (!target.closest('.margin-comment-card') && !target.closest('.margin-comment-icon')) {
@@ -166,6 +256,17 @@ export default function RefleksjonView() {
       
     } catch (error) {
       console.error('Error adding comment', error);
+      throw error;
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    try {
+      const { doc, deleteDoc } = await import('firebase/firestore');
+      await deleteDoc(doc(db, 'comments', commentId));
+      setComments(prev => prev.filter(c => c.id !== commentId));
+    } catch (error) {
+      console.error('Error deleting comment', error);
       throw error;
     }
   };
@@ -289,6 +390,12 @@ export default function RefleksjonView() {
 
   return (
     <div className="bg-brand-surface min-h-screen">
+      <style>{`
+        ::highlight(comment-highlight) {
+          background-color: rgba(0, 0, 0, 0.1);
+          color: inherit;
+        }
+      `}</style>
       <motion.section 
         className="py-20 md:py-32 px-6 md:px-12 max-w-3xl mx-auto"
         initial={{ opacity: 0, y: 30 }}
@@ -467,6 +574,7 @@ export default function RefleksjonView() {
             comments={comments} 
             loading={commentsLoading} 
             onAddComment={handleAddComment} 
+            onDeleteComment={handleDeleteComment}
             focusedCommentId={focusedCommentId}
           />
         </div>

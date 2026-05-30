@@ -117,5 +117,33 @@ service cloud.firestore {
       allow update: if isSignedIn() && incoming().userId == request.auth.uid && isValidComment(incoming());
       allow delete: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
     }
+
+    function isValidDiary(data) {
+      return data.keys().hasAll(['title', 'content', 'language', 'createdAt', 'updatedAt', 'authorId']) &&
+             data.title is string && data.title.size() <= 200 &&
+             data.content is string && data.content.size() <= 5000000 &&
+             data.language is string && (data.language == 'no' || data.language == 'en' || data.language == 'both') &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp &&
+             data.authorId is string && data.authorId == request.auth.uid;
+    }
+
+    match /diary/{diaryId} {
+      allow read: if true;
+      
+      allow create: if isSignedIn() && isAdmin() &&
+                    isValidId(diaryId) &&
+                    isValidDiary(incoming()) &&
+                    incoming().createdAt == request.time &&
+                    incoming().updatedAt == request.time;
+                    
+      allow update: if isSignedIn() && isAdmin() &&
+                    isValidId(diaryId) &&
+                    isValidDiary(incoming()) &&
+                    incoming().createdAt == existing().createdAt &&
+                    incoming().updatedAt == request.time;
+                    
+      allow delete: if isSignedIn() && isAdmin() && isValidId(diaryId);
+    }
   }
 }

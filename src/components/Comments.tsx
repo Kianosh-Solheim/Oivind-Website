@@ -3,7 +3,7 @@ import { collection, query, where, getDocs, addDoc, serverTimestamp, orderBy } f
 import { db } from '../lib/firebase';
 import { useAuth } from '../lib/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
-import { MessageSquare, Quote } from 'lucide-react';
+import { MessageSquare, Quote, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 export interface Comment {
@@ -23,16 +23,21 @@ interface CommentsProps {
   comments: Comment[];
   loading: boolean;
   onAddComment: (comment: Omit<Comment, 'id' | 'createdAt'>) => Promise<void>;
+  onDeleteComment?: (commentId: string) => Promise<void>;
   focusedCommentId?: string;
 }
 
-export default function Comments({ articleId, initialQuote = '', comments, loading, onAddComment, focusedCommentId }: CommentsProps) {
+export default function Comments({ articleId, initialQuote = '', comments, loading, onAddComment, onDeleteComment, focusedCommentId }: CommentsProps) {
   const [newComment, setNewComment] = useState('');
   const [activeQuote, setActiveQuote] = useState(initialQuote);
   const [submitting, setSubmitting] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   
   const { user, signInWithGoogle } = useAuth();
   const { language } = useLanguage();
+  
+  const isAdmin = user?.email === 'kianoshsolheim@gmail.com' || user?.email === 'oivindsolheim@gmail.com';
 
   useEffect(() => {
     setActiveQuote(initialQuote);
@@ -188,6 +193,16 @@ export default function Comments({ articleId, initialQuote = '', comments, loadi
                     </div>
                   </div>
                 </div>
+                {onDeleteComment && (isAdmin || (user && user.uid === comment.userId)) && (
+                  <button 
+                    onClick={() => setConfirmDeleteId(comment.id)}
+                    disabled={deletingId === comment.id}
+                    className="text-gray-400 hover:text-red-500 transition-colors p-2 disabled:opacity-50"
+                    title={language === 'en' ? 'Delete comment' : 'Slett kommentar'}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
               </div>
               
               {comment.quote && (
@@ -203,6 +218,48 @@ export default function Comments({ articleId, initialQuote = '', comments, loadi
           ))
         )}
       </div>
+      
+      {/* Confirmation Modal */}
+      {confirmDeleteId && (
+        <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4">
+          <div className="bg-brand-surface w-full max-w-sm rounded-sm p-8 relative shadow-2xl">
+            <h3 className="text-xl font-serif mb-4 text-brand-dark">
+              {language === 'en' ? 'Delete Comment' : 'Slett kommentar'}
+            </h3>
+            <p className="text-sm text-brand-muted mb-8 line-clamp-3">
+              {language === 'en' 
+                ? 'Are you sure you want to delete this comment? This action cannot be undone.'
+                : 'Er du sikker på at du vil slette denne kommentaren? Dette kan ikke angres.'}
+            </p>
+            <div className="flex gap-4">
+              <button 
+                onClick={async () => {
+                  if (!onDeleteComment) return;
+                  setDeletingId(confirmDeleteId);
+                  setConfirmDeleteId(null);
+                  try {
+                    await onDeleteComment(confirmDeleteId);
+                  } catch (e) {
+                    console.error("Error deleting comment", e);
+                  } finally {
+                    setDeletingId(null);
+                  }
+                }}
+                className="flex-1 py-3 bg-red-600 text-white text-xs font-semibold tracking-widest uppercase hover:bg-red-700 transition-colors"
+                disabled={deletingId !== null}
+              >
+                {language === 'en' ? 'Delete' : 'Slett'}
+              </button>
+              <button 
+                onClick={() => setConfirmDeleteId(null)}
+                className="flex-1 py-3 border border-gray-200 text-brand-muted text-xs font-semibold tracking-widest uppercase hover:bg-gray-50 transition-colors"
+              >
+                {language === 'en' ? 'Cancel' : 'Avbryt'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

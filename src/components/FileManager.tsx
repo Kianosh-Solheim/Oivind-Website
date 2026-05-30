@@ -135,7 +135,7 @@ export default function FileManager({ onSelect }: { onSelect?: (url: string, cap
     
     const accessKey = import.meta.env.VITE_UNSPLASH_ACCESS_KEY;
     if (!accessKey) {
-      alert('VITE_UNSPLASH_ACCESS_KEY er ikkje konfigurert i miljøvariablane.');
+      console.error('VITE_UNSPLASH_ACCESS_KEY er ikkje konfigurert i miljøvariablane.');
       return;
     }
     
@@ -150,7 +150,7 @@ export default function FileManager({ onSelect }: { onSelect?: (url: string, cap
       setUnsplashImages(data.results || []);
     } catch (err) {
       console.error(err);
-      alert('Kunne ikkje hente bilete frå Unsplash.');
+      console.error('Kunne ikkje hente bilete frå Wikipedia / Unsplash. ' + (err instanceof Error ? err.message : ''));
     } finally {
       setUnsplashLoading(false);
     }
@@ -173,7 +173,7 @@ export default function FileManager({ onSelect }: { onSelect?: (url: string, cap
       }
     } catch (err) {
       console.error(err);
-      alert('Kunne ikkje hente bilete frå Wikimedia Commons.');
+      console.error('Kunne ikkje hente bilete frå Wikimedia Commons.');
     } finally {
       setWikiLoading(false);
     }

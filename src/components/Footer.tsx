@@ -9,7 +9,7 @@ export default function Footer() {
         <div className="lg:col-span-3">
           <div className="w-full max-w-[280px] mx-auto lg:mx-0">
             <img 
-              src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800&q=80" 
+              src="/oivind-h-solheim.png" 
               alt="Portrait of Øivind H. Solheim" 
               className="w-full h-auto object-cover filter grayscale contrast-125"
             />
