@@ -155,5 +155,9 @@ service cloud.firestore {
       // Allow any user to increment the counter
       allow write: if true;
     }
+    match /pageStats/{statId} {
+      allow read: if true;
+      allow write: if true;
+    }
   }
 }

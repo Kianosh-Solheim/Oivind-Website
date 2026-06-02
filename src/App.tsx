@@ -14,8 +14,8 @@ import VisitorTracker from './components/VisitorTracker';
 export default function App() {
   return (
     <LanguageProvider>
-      <VisitorTracker />
       <Router>
+        <VisitorTracker />
         <div className="min-h-screen bg-white">
           <Header />
           <main>

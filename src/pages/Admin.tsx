@@ -58,6 +58,7 @@ export default function Admin() {
   const [books, setBooks] = useState<Book[]>([]);
   const [diaries, setDiaries] = useState<DiaryEntry[]>([]);
   const [visitors, setVisitors] = useState<number>(0);
+  const [pageStats, setPageStats] = useState<any[]>([]);
   
   const [isComposing, setIsComposing] = useState(false);
   const [isComposingDiary, setIsComposingDiary] = useState(false);
@@ -154,6 +155,9 @@ export default function Admin() {
       if (statsDoc.exists()) {
         setVisitors(statsDoc.data().count || 0);
       }
+
+      const pageStatsSnap = await getDocs(collection(db, 'pageStats'));
+      setPageStats(pageStatsSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })));
     } catch (e) {
       console.error("Failed to load data", e);
     }
@@ -908,6 +912,38 @@ export default function Admin() {
                 <div className="bg-gray-50 border border-gray-100 p-6 flex flex-col items-center justify-center">
                   <span className="text-3xl font-serif text-brand-dark mb-2">{books.length}</span>
                   <span className="text-[10px] uppercase tracking-widest text-brand-muted font-semibold">Bøker</span>
+                </div>
+              </div>
+
+              <div className="mt-12 bg-white border border-gray-100 shadow-sm overflow-hidden">
+                <div className="overflow-x-auto w-full">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-100 text-[10px] uppercase tracking-widest text-brand-muted font-semibold">
+                        <th className="p-4 font-semibold">Side</th>
+                        <th className="p-4 font-semibold w-32 text-right">Visningar</th>
+                        <th className="p-4 font-semibold w-48 text-right">Tid brukt (totalt)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pageStats.sort((a, b) => (b.views || 0) - (a.views || 0)).map(stat => (
+                        <tr key={stat.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                          <td className="p-4 font-mono text-xs text-brand-dark">{stat.path || '/'}</td>
+                          <td className="p-4 text-sm text-right">{stat.views || 0}</td>
+                          <td className="p-4 text-sm text-right text-brand-muted">
+                            {stat.totalDurationSeconds > 60 
+                              ? `${Math.floor(stat.totalDurationSeconds / 60)}m ${stat.totalDurationSeconds % 60}s` 
+                              : `${stat.totalDurationSeconds || 0}s`}
+                          </td>
+                        </tr>
+                      ))}
+                      {pageStats.length === 0 && (
+                        <tr>
+                          <td colSpan={3} className="p-8 text-center text-sm text-brand-muted">Ingen visningsdata enno.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </section>
