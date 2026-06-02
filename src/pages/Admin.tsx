@@ -57,6 +57,7 @@ export default function Admin() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [books, setBooks] = useState<Book[]>([]);
   const [diaries, setDiaries] = useState<DiaryEntry[]>([]);
+  const [visitors, setVisitors] = useState<number>(0);
   
   const [isComposing, setIsComposing] = useState(false);
   const [isComposingDiary, setIsComposingDiary] = useState(false);
@@ -71,7 +72,7 @@ export default function Admin() {
   const [articleForm, setArticleForm] = useState({ title: '', content: '', published: true, language: 'no', slug: '', imageUrl: '', imageCaption: '', translationId: '' });
   const [infoDialog, setInfoDialog] = useState<{title: string, content: React.ReactNode} | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{title: string, message: string, onConfirm: () => void} | null>(null);
-  const [dashboardTab, setDashboardTab] = useState<'articles' | 'books' | 'diary' | 'files'>('articles');
+  const [dashboardTab, setDashboardTab] = useState<'overview' | 'articles' | 'books' | 'diary' | 'files'>('overview');
   
   const [bookForm, setBookForm] = useState<Book>({ title: '', description: '', publishedYear: new Date().getFullYear(), coverImageUrl: '', isbn: '', buyLink: '', pageCount: 0, language: 'no', titleEn: '', descriptionEn: '', buyLinkEn: '' });
 
@@ -148,6 +149,11 @@ export default function Admin() {
 
       const diariesSnap = await getDocs(query(collection(db, 'diary'), orderBy('createdAt', 'desc')));
       setDiaries(diariesSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as DiaryEntry)));
+
+      const statsDoc = await getDoc(doc(db, 'stats', 'visitors'));
+      if (statsDoc.exists()) {
+        setVisitors(statsDoc.data().count || 0);
+      }
     } catch (e) {
       console.error("Failed to load data", e);
     }
@@ -849,6 +855,12 @@ export default function Admin() {
         <aside className="lg:col-span-3 xl:col-span-2">
           <nav className="flex flex-row lg:flex-col gap-2 overflow-x-auto pb-4 lg:pb-0 border-b lg:border-b-0 border-gray-200">
             <button 
+              onClick={() => setDashboardTab('overview')} 
+              className={`text-left px-4 py-3 text-xs tracking-widest uppercase font-semibold transition-colors shrink-0 ${dashboardTab === 'overview' ? 'bg-brand-dark text-white' : 'text-brand-muted hover:text-brand-dark hover:bg-gray-50'}`}
+            >
+              Oversikt
+            </button>
+            <button 
               onClick={() => setDashboardTab('articles')} 
               className={`text-left px-4 py-3 text-xs tracking-widest uppercase font-semibold transition-colors shrink-0 ${dashboardTab === 'articles' ? 'bg-brand-dark text-white' : 'text-brand-muted hover:text-brand-dark hover:bg-gray-50'}`}
             >
@@ -877,6 +889,30 @@ export default function Admin() {
 
         {/* MAIN CONTENT AREA */}
         <main className="lg:col-span-9 xl:col-span-10">
+          {dashboardTab === 'overview' && (
+            <section className="mb-12">
+              <h2 className="text-2xl font-serif text-brand-dark mb-6 border-b border-gray-200 pb-4">Oversikt</h2>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-gray-50 border border-gray-100 p-6 flex flex-col items-center justify-center">
+                  <span className="text-3xl font-serif text-brand-dark mb-2">{visitors}</span>
+                  <span className="text-[10px] uppercase tracking-widest text-brand-muted font-semibold">Besøkande</span>
+                </div>
+                <div className="bg-gray-50 border border-gray-100 p-6 flex flex-col items-center justify-center">
+                  <span className="text-3xl font-serif text-brand-dark mb-2">{articles.length}</span>
+                  <span className="text-[10px] uppercase tracking-widest text-brand-muted font-semibold">Artiklar</span>
+                </div>
+                <div className="bg-gray-50 border border-gray-100 p-6 flex flex-col items-center justify-center">
+                  <span className="text-3xl font-serif text-brand-dark mb-2">{diaries.length}</span>
+                  <span className="text-[10px] uppercase tracking-widest text-brand-muted font-semibold">Dagbokinnlegg</span>
+                </div>
+                <div className="bg-gray-50 border border-gray-100 p-6 flex flex-col items-center justify-center">
+                  <span className="text-3xl font-serif text-brand-dark mb-2">{books.length}</span>
+                  <span className="text-[10px] uppercase tracking-widest text-brand-muted font-semibold">Bøker</span>
+                </div>
+              </div>
+            </section>
+          )}
+
           {/* ARTICLES MANAGE */}
           {dashboardTab === 'articles' && (
             <section>

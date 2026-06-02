@@ -150,5 +150,10 @@ service cloud.firestore {
                     
       allow delete: if isSignedIn() && isAdmin() && isValidId(diaryId);
     }
+    match /stats/{statId} {
+      allow read: if true;
+      // Allow any user to increment the counter
+      allow write: if true;
+    }
   }
 }

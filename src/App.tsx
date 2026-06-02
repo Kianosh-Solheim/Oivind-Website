@@ -9,10 +9,12 @@ import Romanar from './pages/Romanar';
 import Admin from './pages/Admin';
 import Dagbok from './pages/Dagbok';
 import { LanguageProvider } from './context/LanguageContext';
+import VisitorTracker from './components/VisitorTracker';
 
 export default function App() {
   return (
     <LanguageProvider>
+      <VisitorTracker />
       <Router>
         <div className="min-h-screen bg-white">
           <Header />
