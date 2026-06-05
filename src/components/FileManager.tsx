@@ -24,6 +24,10 @@ export default function FileManager({ onSelect, language = 'no' }: { onSelect?: 
   const [wikiQuery, setWikiQuery] = useState('');
   const [wikiImages, setWikiImages] = useState<any[]>([]);
   const [wikiLoading, setWikiLoading] = useState(false);
+  const wikiLoadingRef = useRef(false);
+  const [wikiOffset, setWikiOffset] = useState<number>(0);
+  const [wikiHasMore, setWikiHasMore] = useState(false);
+  const wikiHasMoreRef = useRef(false);
   
   // Custom dialog states to replace window.*
   const [uploadPrompt, setUploadPrompt] = useState<{file: File, filename: string} | null>(null);
@@ -156,26 +160,55 @@ export default function FileManager({ onSelect, language = 'no' }: { onSelect?: 
     }
   };
 
-  const searchWikimedia = async (e?: React.FormEvent) => {
+  const searchWikimedia = async (e?: React.FormEvent, loadMore = false) => {
     if (e) e.preventDefault();
     if (!wikiQuery.trim()) return;
     
+    if (wikiLoadingRef.current) return;
+    
+    wikiLoadingRef.current = true;
     setWikiLoading(true);
+    if (!loadMore) {
+      wikiHasMoreRef.current = false;
+      setWikiHasMore(false);
+      setWikiOffset(0);
+    }
+    
     try {
-      const res = await fetch(`https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(wikiQuery)}&gsrnamespace=6&gsrlimit=20&prop=imageinfo&iiprop=url|extmetadata&format=json&origin=*`);
+      const offsetParam = loadMore ? `&gsroffset=${wikiOffset}` : '';
+      const res = await fetch(`https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(wikiQuery)}&gsrnamespace=6&gsrlimit=20&prop=imageinfo&iiprop=url|extmetadata|size&iiurlwidth=500&format=json&origin=*${offsetParam}`);
       const data = await res.json();
+      
+      let newImages: any[] = [];
       if (data.query && data.query.pages) {
-        const pages = Object.values(data.query.pages);
-        /* Filter out unsupported formats if any, though namespace 6 is mostly images/media */
-        setWikiImages(pages);
+        newImages = Object.values(data.query.pages);
+      }
+      
+      setWikiImages(prev => loadMore ? [...prev, ...newImages] : newImages);
+      
+      if (data.continue && data.continue.gsroffset) {
+        setWikiOffset(data.continue.gsroffset);
+        wikiHasMoreRef.current = true;
+        setWikiHasMore(true);
       } else {
-        setWikiImages([]);
+        wikiHasMoreRef.current = false;
+        setWikiHasMore(false);
       }
     } catch (err) {
       console.error(err);
       console.error('Kunne ikkje hente bilete frå Wikimedia Commons.');
     } finally {
+      wikiLoadingRef.current = false;
       setWikiLoading(false);
+    }
+  };
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    if (target.scrollHeight - target.scrollTop <= target.clientHeight + 150) {
+      if (activeTab === 'wikimedia' && wikiHasMoreRef.current && !wikiLoadingRef.current) {
+        searchWikimedia(undefined, true);
+      }
     }
   };
 
@@ -218,7 +251,7 @@ export default function FileManager({ onSelect, language = 'no' }: { onSelect?: 
         )}
       </div>
 
-      <div className="flex-grow overflow-y-auto">
+      <div className="flex-grow overflow-y-auto" onScroll={handleScroll}>
         {activeTab === 'my-images' && (
           <>
             {loading ? (
@@ -233,7 +266,7 @@ export default function FileManager({ onSelect, language = 'no' }: { onSelect?: 
                       className="w-full h-32 bg-gray-50 flex items-center justify-center overflow-hidden cursor-pointer"
                       onClick={() => onSelect && onSelect(img.url)}
                     >
-                      <img loading="lazy" src={img.url} alt={img.filename} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                      <img loading="lazy" src={img.url} alt={img.filename} className="w-full h-full object-contain group-hover:scale-105 transition-transform p-2" />
                     </div>
                     <div className="p-3 flex justify-between items-center border-t border-gray-50 bg-white z-10">
                       <span className="text-xs font-semibold truncate max-w-[120px]" title={img.filename}>{img.filename}</span>
@@ -293,7 +326,7 @@ export default function FileManager({ onSelect, language = 'no' }: { onSelect?: 
                   onSelect && onSelect(img.urls.regular, captionStr);
                 }}>
                   <div className="w-full bg-gray-50 flex items-center justify-center overflow-hidden">
-                    <img loading="lazy" src={img.urls.small} alt={img.alt_description || 'Unsplash image'} className="w-full h-auto block object-cover group-hover:scale-105 transition-transform duration-500" />
+                    <img loading="lazy" src={img.urls.small} alt={img.alt_description || 'Unsplash image'} className="w-full h-auto block object-contain group-hover:scale-105 transition-transform duration-500" />
                   </div>
                   <div className="p-3 border-t border-gray-50 bg-white z-10 relative">
                     <span className="text-[10px] text-brand-muted truncate block">Av {img.user?.name}</span>
@@ -334,6 +367,7 @@ export default function FileManager({ onSelect, language = 'no' }: { onSelect?: 
                 if (!info) return null;
                 const author = info.extmetadata?.Artist?.value ? info.extmetadata.Artist.value.replace(/<[^>]+>/g, '') : 'Ukjend';
                 const fileUrl = info.url;
+                const thumbUrl = info.thumburl || info.url;
                 
                 return (
                 <div key={img.pageid} className="break-inside-avoid bg-white border border-gray-100 flex flex-col group relative overflow-hidden cursor-pointer" onClick={() => {
@@ -345,7 +379,7 @@ export default function FileManager({ onSelect, language = 'no' }: { onSelect?: 
                   onSelect && onSelect(fileUrl, captionStr);
                 }}>
                   <div className="w-full bg-gray-50 flex items-center justify-center overflow-hidden">
-                    <img loading="lazy" src={fileUrl} alt={img.title} className="w-full h-auto block object-cover group-hover:scale-105 transition-transform duration-500" />
+                    <img loading="lazy" src={thumbUrl} alt={img.title} className="w-full h-auto block object-contain group-hover:scale-105 transition-transform duration-500" />
                   </div>
                   <div className="p-3 border-t border-gray-50 bg-white z-10 relative">
                     <span className="text-[10px] text-brand-muted truncate block" title={author}>Av {author}</span>
@@ -363,6 +397,12 @@ export default function FileManager({ onSelect, language = 'no' }: { onSelect?: 
                 );
               })}
             </div>
+            
+            {wikiLoading && wikiImages.length > 0 && (
+              <div className="py-6 text-center text-sm font-semibold tracking-widest text-brand-muted uppercase">
+                Lastar fleire bilete...
+              </div>
+            )}
           </div>
         )}
       </div>

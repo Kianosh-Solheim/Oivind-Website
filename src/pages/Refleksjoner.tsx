@@ -25,7 +25,7 @@ export default function Refleksjoner() {
   const navigate = useNavigate();
   const { t, language } = useLanguage();
 
-  const isAdmin = user?.email === 'kianoshsolheim@gmail.com' || user?.email === 'oivindsolheim@gmail.com';
+  const isAdmin = user?.email?.toLowerCase() === 'kianoshsolheim@gmail.com' || user?.email?.toLowerCase() === 'oivindsolheim@gmail.com';
 
   useEffect(() => {
     const fetchArticles = async () => {
@@ -113,8 +113,8 @@ export default function Refleksjoner() {
                     </button>
                   )}
                   {article.imageUrl && (
-                    <div className="w-full md:w-2/5 h-64 md:h-auto overflow-hidden bg-brand-sand relative">
-                      <img loading="lazy" src={article.imageUrl} alt={article.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                    <div className="w-full md:w-2/5 h-64 md:h-auto bg-gray-50 flex items-center justify-center p-4 border border-gray-100 relative">
+                      <img loading="lazy" src={article.imageUrl} alt={article.title} className="w-full h-full object-contain group-hover:scale-[1.02] transition-transform duration-700" />
                     </div>
                   )}
                   <div className={`p-8 md:p-12 flex flex-col justify-center ${article.imageUrl ? 'md:w-3/5' : 'w-full'}`}>

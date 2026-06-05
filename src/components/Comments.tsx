@@ -37,7 +37,7 @@ export default function Comments({ articleId, initialQuote = '', comments, loadi
   const { user, signInWithGoogle } = useAuth();
   const { language } = useLanguage();
   
-  const isAdmin = user?.email === 'kianoshsolheim@gmail.com' || user?.email === 'oivindsolheim@gmail.com';
+  const isAdmin = user?.email?.toLowerCase() === 'kianoshsolheim@gmail.com' || user?.email?.toLowerCase() === 'oivindsolheim@gmail.com';
 
   useEffect(() => {
     setActiveQuote(initialQuote);

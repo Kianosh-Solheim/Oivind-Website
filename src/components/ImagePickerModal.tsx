@@ -11,7 +11,7 @@ export default function ImagePickerModal({ onClose, onSelect, language }: { onCl
             <X size={20} />
           </button>
         </div>
-        <div className="p-0 max-h-[70vh] overflow-y-auto">
+        <div className="p-0 h-[80vh] min-h-[500px]">
           <FileManager language={language} onSelect={(url, caption) => {
             onSelect(url, caption);
             onClose();

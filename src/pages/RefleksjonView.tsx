@@ -441,8 +441,8 @@ export default function RefleksjonView() {
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.8, delay: 0.3 }}
           >
-            <div className="w-full h-[40vh] min-h-[300px] overflow-hidden bg-brand-sand">
-              <img loading="lazy" src={article.imageUrl} alt={article.title} className="w-full h-full object-cover" />
+            <div className="w-full h-[50vh] min-h-[400px] flex items-center justify-center p-4 bg-gray-50 border border-gray-100 mb-2">
+              <img loading="lazy" src={article.imageUrl} alt={article.title} className="w-full h-full object-contain" />
             </div>
             {article.imageCaption && (
               <figcaption 

@@ -68,12 +68,14 @@ export default function Admin() {
   const [originalArticle, setOriginalArticle] = useState<Article | null>(null);
   const [editingDiaryId, setEditingDiaryId] = useState<string | null>(null);
   const [originalDiary, setOriginalDiary] = useState<DiaryEntry | null>(null);
+  const [editingBookId, setEditingBookId] = useState<string | null>(null);
   const [articleFilter, setArticleFilter] = useState('all');
   const [diaryFilter, setDiaryFilter] = useState('all');
   const [articleForm, setArticleForm] = useState({ title: '', content: '', published: true, language: 'no', slug: '', imageUrl: '', imageCaption: '', translationId: '' });
   const [infoDialog, setInfoDialog] = useState<{title: string, content: React.ReactNode} | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{title: string, message: string, onConfirm: () => void} | null>(null);
   const [dashboardTab, setDashboardTab] = useState<'overview' | 'articles' | 'books' | 'diary' | 'files'>('overview');
+  const [isSaving, setIsSaving] = useState(false);
   
   const [bookForm, setBookForm] = useState<Book>({ title: '', description: '', publishedYear: new Date().getFullYear(), coverImageUrl: '', isbn: '', buyLink: '', pageCount: 0, language: 'no', titleEn: '', descriptionEn: '', buyLinkEn: '' });
 
@@ -164,9 +166,11 @@ export default function Admin() {
   };
 
   const saveArticle = async () => {
-    if (!user) return;
+    if (!user || isSaving) return;
+    setIsSaving(true);
     if (!articleForm.title || !articleForm.content) {
       console.error("Please provide a title and meaningful content.");
+      setIsSaving(false);
       return;
     }
     try {
@@ -210,6 +214,8 @@ export default function Admin() {
       loadData();
     } catch (e) {
       console.error("Feil ved lagring av artikkel. Er du sikker på at du er administrator? Error:", e);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -217,21 +223,51 @@ export default function Admin() {
     navigate(`/admin?edit=${article.id}`);
   };
 
-  const addBook = async (e: React.FormEvent) => {
+  const editBook = (book: Book) => {
+    setBookForm({
+      title: book.title || '',
+      description: book.description || '',
+      publishedYear: book.publishedYear || new Date().getFullYear(),
+      coverImageUrl: book.coverImageUrl || '',
+      isbn: book.isbn || '',
+      buyLink: book.buyLink || '',
+      pageCount: book.pageCount || 0,
+      language: book.language || 'no',
+      titleEn: book.titleEn || '',
+      descriptionEn: book.descriptionEn || '',
+      buyLinkEn: book.buyLinkEn || ''
+    });
+    setEditingBookId(book.id || null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const saveBook = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user || isSaving) return;
+    setIsSaving(true);
     try {
-      await addDoc(collection(db, 'books'), {
+      const bookData = {
         ...bookForm,
         publishedYear: Number(bookForm.publishedYear),
-        authorId: user.uid,
-        createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
-      });
+      };
+
+      if (editingBookId) {
+        await updateDoc(doc(db, 'books', editingBookId), bookData);
+      } else {
+        await addDoc(collection(db, 'books'), {
+          ...bookData,
+          authorId: user.uid,
+          createdAt: serverTimestamp(),
+        });
+      }
       setBookForm({ title: '', description: '', publishedYear: new Date().getFullYear(), coverImageUrl: '', isbn: '', buyLink: '', pageCount: 0, language: 'no', titleEn: '', descriptionEn: '', buyLinkEn: '' });
+      setEditingBookId(null);
       loadData();
     } catch (e) {
       console.error("Feil ved lagring av bok. Er du sikker på at du er administrator? Error:", e);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -295,7 +331,8 @@ export default function Admin() {
   };
 
   const saveDiary = async () => {
-    if (!user) return;
+    if (!user || isSaving) return;
+    setIsSaving(true);
     try {
       const diaryData: any = {
         title: diaryForm.title,
@@ -336,6 +373,8 @@ export default function Admin() {
       loadData();
     } catch (e) {
       console.error("Feil ved lagring av dagbok. Er du sikker på at du er administrator? Error:", e);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -448,8 +487,8 @@ export default function Admin() {
               </button>
             </div>
             
-            <button onClick={saveArticle} className="px-6 py-2.5 bg-brand-dark text-white text-xs font-semibold tracking-widest hover:bg-black transition-colors">
-              {editingArticleId ? 'OPPDATER' : 'PUBLISER'}
+            <button onClick={saveArticle} disabled={isSaving} className={`px-6 py-2.5 text-white text-xs font-semibold tracking-widest transition-colors ${isSaving ? 'bg-gray-400 cursor-not-allowed' : 'bg-brand-dark hover:bg-black'}`}>
+              {isSaving ? 'LAGRAR...' : (editingArticleId ? 'OPPDATER' : 'PUBLISER')}
             </button>
           </div>
         </header>
@@ -490,10 +529,12 @@ export default function Admin() {
                 {originalArticle.title}
               </h1>
               {originalArticle.imageUrl && (
-                <div className="w-full mb-8">
-                  <img src={originalArticle.imageUrl} className="w-full h-auto max-h-[300px] object-cover rounded-sm" />
-                  {originalArticle.imageCaption && <p className="text-sm text-center text-brand-muted mt-2 italic" dangerouslySetInnerHTML={{ __html: originalArticle.imageCaption }} />}
-                </div>
+                <>
+                  <div className="w-full mb-8 bg-gray-50 flex items-center justify-center p-4 border border-gray-100">
+                    <img src={originalArticle.imageUrl} className="w-full h-auto max-h-[400px] object-contain rounded-sm" />
+                  </div>
+                  {originalArticle.imageCaption && <p className="text-sm text-center text-brand-muted mb-8 italic" dangerouslySetInnerHTML={{ __html: originalArticle.imageCaption }} />}
+                </>
               )}
               <div className="prose prose-lg brand-prose max-w-none pb-12" dangerouslySetInnerHTML={{ __html: originalArticle.content }} />
             </div>
@@ -540,8 +581,8 @@ export default function Admin() {
             
             {articleForm.imageUrl ? (
               <div className="w-full mb-12 relative group rounded-md">
-                <div className="w-full h-[40vh] min-h-[300px] bg-brand-sand overflow-hidden relative">
-                  <img loading="lazy" src={articleForm.imageUrl} alt="Cover" className="w-full h-full object-cover" />
+                <div className="w-full h-[50vh] min-h-[400px] bg-gray-50 border border-gray-100 flex items-center justify-center p-4 relative">
+                  <img loading="lazy" src={articleForm.imageUrl} alt="Cover" className="w-full h-full object-contain" />
                   <button 
                     onClick={() => setArticleForm({...articleForm, imageUrl: '', imageCaption: ''})} 
                     className="absolute top-4 right-4 bg-black/60 text-white px-3 py-1.5 text-xs font-semibold tracking-widest uppercase rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
@@ -660,8 +701,8 @@ export default function Admin() {
               </button>
             </div>
             
-            <button onClick={saveDiary} className="px-6 py-2.5 bg-brand-dark text-white text-xs font-semibold tracking-widest hover:bg-black transition-colors">
-              {editingDiaryId ? 'OPPDATER' : 'PUBLISER I DAGBOK'}
+            <button onClick={saveDiary} disabled={isSaving} className={`px-6 py-2.5 text-white text-xs font-semibold tracking-widest transition-colors ${isSaving ? 'bg-gray-400 cursor-not-allowed' : 'bg-brand-dark hover:bg-black'}`}>
+              {isSaving ? 'LAGRAR...' : (editingDiaryId ? 'OPPDATER' : 'PUBLISER I DAGBOK')}
             </button>
           </div>
         </header>
@@ -701,10 +742,12 @@ export default function Admin() {
                 {originalDiary.title || 'Uten tittel'}
               </h1>
               {originalDiary.imageUrl && (
-                <div className="w-full mb-8">
-                  <img src={originalDiary.imageUrl} className="w-full h-auto max-h-[300px] object-cover rounded-sm" />
-                  {originalDiary.imageCaption && <p className="text-sm text-center text-brand-muted mt-2 italic" dangerouslySetInnerHTML={{ __html: originalDiary.imageCaption }} />}
-                </div>
+                <>
+                  <div className="w-full mb-8 bg-gray-50 flex items-center justify-center p-4 border border-gray-100">
+                    <img src={originalDiary.imageUrl} className="w-full h-auto max-h-[400px] object-contain rounded-sm" />
+                  </div>
+                  {originalDiary.imageCaption && <p className="text-sm text-center text-brand-muted mb-8 italic" dangerouslySetInnerHTML={{ __html: originalDiary.imageCaption }} />}
+                </>
               )}
               <div className="prose prose-lg brand-prose max-w-none pb-12" dangerouslySetInnerHTML={{ __html: originalDiary.content }} />
             </div>
@@ -750,8 +793,8 @@ export default function Admin() {
             
             {diaryForm.imageUrl ? (
               <div className="w-full mb-12 relative group rounded-md">
-                <div className="w-full h-[40vh] min-h-[300px] bg-brand-sand overflow-hidden relative">
-                  <img loading="lazy" src={diaryForm.imageUrl} alt="Cover" className="w-full h-full object-cover" />
+                <div className="w-full h-[50vh] min-h-[400px] bg-gray-50 border border-gray-100 flex items-center justify-center p-4 relative">
+                  <img loading="lazy" src={diaryForm.imageUrl} alt="Cover" className="w-full h-full object-contain" />
                   <button 
                     onClick={() => setDiaryForm({...diaryForm, imageUrl: '', imageCaption: ''})} 
                     className="absolute top-4 right-4 bg-black/60 text-white px-3 py-1.5 text-xs font-semibold tracking-widest uppercase rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80"
@@ -1082,10 +1125,10 @@ export default function Admin() {
               </button>
             </div>
             
-            <form onSubmit={addBook} className="space-y-4 mb-8 bg-white border border-gray-100 p-5 md:p-6 shadow-sm">
+            <form onSubmit={saveBook} className="space-y-4 mb-8 bg-white border border-gray-100 p-5 md:p-6 shadow-sm">
               {bookForm.coverImageUrl ? (
-                <div className="relative w-32 h-48 bg-gray-100 mx-auto rounded overflow-hidden group">
-                  <img src={bookForm.coverImageUrl} className="w-full h-full object-cover" alt="Omslag" />
+                <div className="relative w-32 h-48 bg-gray-50 border border-gray-100 mx-auto rounded overflow-hidden group flex items-center justify-center p-2">
+                  <img src={bookForm.coverImageUrl} className="w-full h-full object-contain" alt="Omslag" />
                   <button type="button" onClick={() => setBookForm({...bookForm, coverImageUrl: ''})} className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">Fjern</button>
                 </div>
               ) : (
@@ -1170,7 +1213,9 @@ export default function Admin() {
                 type="text" placeholder="ISBN (valfritt)"
                 value={bookForm.isbn || ''} onChange={e => setBookForm({...bookForm, isbn: e.target.value})}
                 className="w-full p-3 text-sm border border-gray-200 focus:border-brand-accent focus:ring-1 focus:ring-brand-accent bg-white outline-none transition-colors" />
-              <button type="submit" className="w-full py-3 bg-brand-dark text-white uppercase tracking-widest font-semibold text-xs mt-2 hover:bg-black transition-colors">LEGG TIL BOK</button>
+              <button type="submit" disabled={isSaving} className={`w-full py-3 text-white uppercase tracking-widest font-semibold text-xs mt-2 transition-colors ${isSaving ? 'bg-gray-400 cursor-not-allowed' : 'bg-brand-dark hover:bg-black'}`}>
+                {isSaving ? 'LAGRAR...' : (editingBookId ? 'OPPDATER BOK' : 'LEGG TIL BOK')}
+              </button>
             </form>
 
             <div className="space-y-3">
@@ -1180,7 +1225,10 @@ export default function Admin() {
                     <h3 className="font-semibold text-sm">{book.title}</h3>
                     <span className="text-[11px] text-gray-500">{book.publishedYear}</span>
                   </div>
-                  <button onClick={() => deleteBook(book.id!)} className="text-red-500 text-[10px] font-semibold md:opacity-0 group-hover:opacity-100 transition-opacity tracking-widest shrink-0">SLETT</button>
+                  <div className="flex gap-4 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => editBook(book)} className="text-brand-dark text-[10px] font-semibold tracking-widest shrink-0">REDIGER</button>
+                    <button onClick={() => deleteBook(book.id!)} className="text-red-500 text-[10px] font-semibold tracking-widest shrink-0">SLETT</button>
+                  </div>
                 </div>
               ))}
               {books.length === 0 && (
@@ -1314,9 +1362,9 @@ export default function Admin() {
 
           {/* FILES MANAGE */}
           {dashboardTab === 'files' && (
-          <div className="pt-4 lg:pt-8 bg-white md:bg-transparent max-w-5xl">
+          <div className="pt-4 lg:pt-8 bg-white md:bg-transparent max-w-5xl h-[80vh] min-h-[600px] flex flex-col">
             {/* The FileManager component already handles its own layout, but we can contain it */}
-            <div className="flex items-center gap-2 border-b border-gray-200 pb-4 mb-6">
+            <div className="flex items-center gap-2 border-b border-gray-200 pb-4 mb-6 shrink-0">
               <h2 className="text-2xl font-serif">Filer</h2>
               <button 
                 onClick={() => setInfoDialog({
@@ -1329,7 +1377,9 @@ export default function Admin() {
                 <Info className="w-4 h-4" />
               </button>
             </div>
-            <FileManager />
+            <div className="flex-grow min-h-0">
+              <FileManager />
+            </div>
           </div>
           )}
 

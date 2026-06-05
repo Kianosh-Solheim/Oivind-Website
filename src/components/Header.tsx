@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X } from 'lucide-react';
+import { Menu, X, Settings } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../lib/AuthContext';
@@ -8,6 +8,7 @@ import { useAuth } from '../lib/AuthContext';
 export default function Header() {
   const location = useLocation();
   const { language, setLanguage, t } = useLanguage();
+  const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
 
   const isComposing = location.pathname.startsWith('/admin') && (location.search.includes('compose=true') || location.search.includes('edit='));
@@ -74,6 +75,14 @@ export default function Header() {
             <button onClick={() => setLanguage('en')} className={`transition-colors ${language === 'en' ? 'text-brand-accent' : 'hover:text-brand-accent'}`}>EN</button>
           </motion.div>
           
+          {user && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.75 }} className="ml-2 flex items-center">
+              <Link to="/admin" className="text-brand-dark hover:text-brand-accent transition-colors" title="Admin">
+                <Settings className="w-5 h-5" />
+              </Link>
+            </motion.div>
+          )}
+
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }} className="ml-4">
             <LoginButton />
           </motion.div>

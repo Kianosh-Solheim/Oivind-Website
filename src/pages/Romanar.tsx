@@ -75,25 +75,51 @@ export default function Romanar() {
               const displayBuyLink = language === 'en' && book.language === 'both' && book.buyLinkEn ? book.buyLinkEn : book.buyLink;
               
               return (
-              <article key={book.id} className="bg-white border border-brand-sand flex flex-col md:flex-row shadow-sm hover:shadow-md transition-shadow duration-300 overflow-hidden">
+              <article key={book.id} className="bg-white border border-brand-sand flex flex-col md:flex-row shadow-sm hover:shadow-md transition-shadow duration-300 overflow-hidden items-stretch md:items-start">
                 {book.coverImageUrl ? (
-                  <div className="w-full md:w-1/3 bg-gray-50 flex-shrink-0 flex items-center justify-center p-8 border-b md:border-b-0 md:border-r border-brand-sand">
-                    <img src={book.coverImageUrl} alt={`Omslag for ${displayTitle}`} className="max-w-[200px] md:max-w-full drop-shadow-xl hover:scale-105 transition-transform duration-500 ease-out" />
-                  </div>
+                  <Link 
+                    to={`/boker/${book.id}`}
+                    className="w-full md:w-1/3 min-h-[300px] h-[40vh] md:h-auto bg-gray-50 flex-shrink-0 p-6 border-b md:border-b-0 md:border-r border-brand-sand cursor-pointer md:self-stretch block"
+                  >
+                    <div className="w-full h-full max-h-[400px] flex items-center justify-center sticky top-24">
+                      <img src={book.coverImageUrl} alt={`Omslag for ${displayTitle}`} className="w-full h-full object-contain hover:scale-[1.02] transition-transform duration-500 ease-out" />
+                    </div>
+                  </Link>
                 ) : (
-                  <div className="w-full md:w-1/3 bg-gray-50 flex-shrink-0 flex items-center justify-center p-12 border-b md:border-b-0 md:border-r border-brand-sand min-h-[300px]">
-                    <BookOpen className="w-16 h-16 text-gray-300" strokeWidth={1} />
-                  </div>
+                  <Link 
+                    to={`/boker/${book.id}`}
+                    className="w-full md:w-1/3 bg-gray-50 flex-shrink-0 p-12 border-b md:border-b-0 md:border-r border-brand-sand min-h-[300px] cursor-pointer md:self-stretch block"
+                  >
+                    <div className="sticky top-24 flex items-center justify-center">
+                      <BookOpen className="w-16 h-16 text-gray-300" strokeWidth={1} />
+                    </div>
+                  </Link>
                 )}
                 
-                <div className="p-8 md:p-12 flex flex-col flex-grow">
+                <div className="p-8 md:p-12 flex flex-col flex-grow w-full md:w-2/3">
                   <div className="text-xs text-brand-muted uppercase tracking-widest font-semibold mb-3">
                     {language === 'en' ? 'PUBLISHED' : 'UTGJEVING'}: {book.publishedYear}
                   </div>
-                  <h2 className="text-3xl font-serif text-brand-dark mb-6">{displayTitle}</h2>
+                  <Link to={`/boker/${book.id}`}>
+                    <h2 className="text-3xl font-serif text-brand-dark mb-6 cursor-pointer hover:text-brand-accent transition-colors">
+                      {displayTitle}
+                    </h2>
+                  </Link>
                   
-                  <div className="text-brand-dark/80 leading-relaxed mb-8 font-serif whitespace-pre-wrap flex-grow relative">
-                    {displayDescription}
+                  <div className="flex-grow">
+                    <Link to={`/boker/${book.id}`} className="block">
+                      <div className="text-brand-dark/80 leading-relaxed font-serif whitespace-pre-wrap cursor-pointer transition-all duration-300 line-clamp-4 mb-4" title={language === 'en' ? 'Read more' : 'Les meir'}>
+                        {displayDescription}
+                      </div>
+                    </Link>
+                    {displayDescription.length > 200 && (
+                      <Link 
+                        to={`/boker/${book.id}`}
+                        className="text-xs font-semibold tracking-widest uppercase text-brand-accent hover:text-brand-dark transition-colors text-left mb-8 block"
+                      >
+                        {language === 'en' ? 'Read full description' : 'Les heile omtalen'}
+                      </Link>
+                    )}
                   </div>
                   
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 pt-8 border-t border-gray-100">

@@ -114,12 +114,12 @@ export default function Dagbok() {
                   </div>
                   
                   {entry.imageUrl && (
-                    <div className="w-full mb-8">
-                      <img src={entry.imageUrl} className="w-full h-auto max-h-[500px] object-cover rounded-sm" />
-                      {entry.imageCaption && (
-                        <p className="text-sm text-center text-brand-muted mt-2 italic" dangerouslySetInnerHTML={{ __html: entry.imageCaption }} />
-                      )}
+                    <div className="w-full mb-8 bg-gray-50 flex items-center justify-center p-4 border border-gray-100">
+                      <img src={entry.imageUrl} className="w-full h-auto max-h-[500px] object-contain rounded-sm" />
                     </div>
+                  )}
+                  {entry.imageCaption && (
+                    <p className="text-sm text-center text-brand-muted mb-8 italic" dangerouslySetInnerHTML={{ __html: entry.imageCaption }} />
                   )}
 
                   {isHtml(entry.content) ? (
