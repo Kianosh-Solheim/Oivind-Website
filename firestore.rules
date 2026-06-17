@@ -150,6 +150,11 @@ service cloud.firestore {
                     
       allow delete: if isSignedIn() && isAdmin() && isValidId(diaryId);
     }
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isSignedIn() && isAdmin();
+    }
+
     match /stats/{statId} {
       allow read: if true;
       // Allow any user to increment the counter

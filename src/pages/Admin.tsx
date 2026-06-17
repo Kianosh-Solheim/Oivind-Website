@@ -4,7 +4,7 @@ import { db } from '../lib/firebase';
 import { collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, query, orderBy, updateDoc, getDoc } from 'firebase/firestore';
 import TextareaAutosize from 'react-textarea-autosize';
 import RichTextEditor from '../components/RichTextEditor';
-import { ArrowLeft, Plus, Info } from 'lucide-react';
+import { ArrowLeft, Plus, Info, Save } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import FileManager from '../components/FileManager';
@@ -35,6 +35,14 @@ interface Book {
   titleEn?: string;
   descriptionEn?: string;
   buyLinkEn?: string;
+}
+
+interface AboutSettings {
+  bioNo: string;
+  bioEn: string;
+  shortBioNo: string;
+  shortBioEn: string;
+  imageUrl: string;
 }
 
 interface DiaryEntry {
@@ -74,12 +82,13 @@ export default function Admin() {
   const [articleForm, setArticleForm] = useState({ title: '', content: '', published: true, language: 'no', slug: '', imageUrl: '', imageCaption: '', translationId: '' });
   const [infoDialog, setInfoDialog] = useState<{title: string, content: React.ReactNode} | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{title: string, message: string, onConfirm: () => void} | null>(null);
-  const [dashboardTab, setDashboardTab] = useState<'overview' | 'articles' | 'books' | 'diary' | 'files'>('overview');
+  const [dashboardTab, setDashboardTab] = useState<'overview' | 'articles' | 'books' | 'diary' | 'files' | 'about'>('overview');
   const [isSaving, setIsSaving] = useState(false);
   
   const [bookForm, setBookForm] = useState<Book>({ title: '', description: '', publishedYear: new Date().getFullYear(), coverImageUrl: '', isbn: '', buyLink: '', pageCount: 0, language: 'no', titleEn: '', descriptionEn: '', buyLinkEn: '' });
 
   const [diaryForm, setDiaryForm] = useState<DiaryEntry>({ title: '', content: '', published: true, language: 'both', slug: '', imageUrl: '', imageCaption: '' });
+  const [aboutForm, setAboutForm] = useState<AboutSettings>({ bioNo: '', bioEn: '', shortBioNo: '', shortBioEn: '', imageUrl: '' });
 
   useEffect(() => {
     if (user) {
@@ -87,7 +96,7 @@ export default function Admin() {
       
       const params = new URLSearchParams(location.search);
       const tabParam = params.get('tab');
-      if (tabParam === 'books' || tabParam === 'files' || tabParam === 'articles' || tabParam === 'diary') {
+      if (tabParam === 'books' || tabParam === 'files' || tabParam === 'articles' || tabParam === 'diary' || tabParam === 'about') {
         setDashboardTab(tabParam as any);
       }
       
@@ -152,6 +161,11 @@ export default function Admin() {
 
       const diariesSnap = await getDocs(query(collection(db, 'diary'), orderBy('createdAt', 'desc')));
       setDiaries(diariesSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as DiaryEntry)));
+      
+      const aboutDoc = await getDoc(doc(db, 'settings', 'about'));
+      if (aboutDoc.exists()) {
+        setAboutForm(aboutDoc.data() as AboutSettings);
+      }
 
       const statsDoc = await getDoc(doc(db, 'stats', 'visitors'));
       if (statsDoc.exists()) {
@@ -162,6 +176,28 @@ export default function Admin() {
       setPageStats(pageStatsSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })));
     } catch (e) {
       console.error("Failed to load data", e);
+    }
+  };
+
+  const saveAboutSettings = async () => {
+    if (!user || isSaving) return;
+    setIsSaving(true);
+    try {
+      await updateDoc(doc(db, 'settings', 'about'), {
+        ...aboutForm
+      }).catch(async (e) => {
+        // if doesn't exist, set it
+        const { setDoc } = await import('firebase/firestore');
+        await setDoc(doc(db, 'settings', 'about'), { ...aboutForm });
+      });
+      setInfoDialog({
+        title: "Lagret",
+        content: <p>Om-meg informasjonen er lagret.</p>
+      });
+    } catch (e) {
+      console.error("Feil ved lagring av innstillinger:", e);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -931,6 +967,12 @@ export default function Admin() {
             >
               Filer
             </button>
+            <button 
+              onClick={() => setDashboardTab('about')} 
+              className={`text-left px-4 py-3 text-xs tracking-widest uppercase font-semibold transition-colors shrink-0 ${dashboardTab === 'about' ? 'bg-brand-dark text-white' : 'text-brand-muted hover:text-brand-dark hover:bg-gray-50'}`}
+            >
+              Om meg
+            </button>
           </nav>
         </aside>
 
@@ -1381,6 +1423,74 @@ export default function Admin() {
               <FileManager />
             </div>
           </div>
+          )}
+
+          {/* ABOUT ME TAB */}
+          {dashboardTab === 'about' && (
+            <section className="pt-4 lg:pt-8 max-w-5xl">
+              <div className="mb-8">
+                <h2 className="text-2xl font-serif mb-2">Om Meg Innstillinger</h2>
+                <p className="text-sm text-gray-500 font-sans">Rediger profilinformasjonen for 'Om meg'-siden og Footer.</p>
+              </div>
+
+              <div className="space-y-8 bg-white p-6 md:p-10 border border-gray-100">
+                <div className="grid md:grid-cols-2 gap-8">
+                  <div className="space-y-4">
+                    <label className="block text-xs tracking-widest text-brand-dark font-sans font-semibold uppercase">Lang Bio (Norsk)</label>
+                    <textarea 
+                      value={aboutForm.bioNo} 
+                      onChange={e => setAboutForm(prev => ({ ...prev, bioNo: e.target.value }))}
+                      className="w-full border border-gray-200 p-4 font-serif text-brand-dark min-h-[300px] focus:outline-none focus:border-brand-dark transition-colors bg-brand-light/30"
+                      placeholder="Hovedtekst for Om Meg siden (Støtter Markdown)"
+                    />
+                  </div>
+                  <div className="space-y-4">
+                    <label className="block text-xs tracking-widest text-brand-dark font-sans font-semibold uppercase">Lang Bio (Engelsk)</label>
+                    <textarea 
+                      value={aboutForm.bioEn} 
+                      onChange={e => setAboutForm(prev => ({ ...prev, bioEn: e.target.value }))}
+                      className="w-full border border-gray-200 p-4 font-serif text-brand-dark min-h-[300px] focus:outline-none focus:border-brand-dark transition-colors bg-brand-light/30"
+                      placeholder="Main text for About page (Supports Markdown)"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-8">
+                  <div className="space-y-4">
+                    <label className="block text-xs tracking-widest text-brand-dark font-sans font-semibold uppercase">Kort Bio Footer (Norsk)</label>
+                    <textarea 
+                      value={aboutForm.shortBioNo} 
+                      onChange={e => setAboutForm(prev => ({ ...prev, shortBioNo: e.target.value }))}
+                      className="w-full border border-gray-200 p-4 font-serif text-brand-dark min-h-[150px] focus:outline-none focus:border-brand-dark transition-colors bg-brand-light/30"
+                      placeholder="Kort tekst som vises i footeren..."
+                    />
+                  </div>
+                  <div className="space-y-4">
+                    <label className="block text-xs tracking-widest text-brand-dark font-sans font-semibold uppercase">Kort Bio Footer (Engelsk)</label>
+                    <textarea 
+                      value={aboutForm.shortBioEn} 
+                      onChange={e => setAboutForm(prev => ({ ...prev, shortBioEn: e.target.value }))}
+                      className="w-full border border-gray-200 p-4 font-serif text-brand-dark min-h-[150px] focus:outline-none focus:border-brand-dark transition-colors bg-brand-light/30"
+                      placeholder="Short text shown in the footer..."
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-6 border-t border-gray-100 flex justify-end">
+                  <button 
+                    onClick={saveAboutSettings}
+                    disabled={isSaving}
+                    className="px-8 py-4 bg-brand-dark text-white text-xs tracking-widest uppercase font-semibold hover:bg-black transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[200px]"
+                  >
+                    {isSaving ? (
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                       <>LAGRE INNSTILLINGER <Save className="ml-2 w-4 h-4" /></>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </section>
           )}
 
           {showBookImagePicker && (

@@ -1,33 +1,62 @@
 import { ArrowRight } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../lib/firebase';
+import { useLanguage } from '../context/LanguageContext';
+import { Link } from 'react-router-dom';
 
 export default function Footer() {
+  const { language, t } = useLanguage();
+  const [aboutData, setAboutData] = useState<{ shortBioNo?: string; shortBioEn?: string; imageUrl?: string }>({});
+
+  useEffect(() => {
+    getDoc(doc(db, 'settings', 'about')).then(snap => {
+      if (snap.exists()) {
+        setAboutData(snap.data());
+      }
+    });
+  }, []);
+
   return (
     <section className="bg-brand-dark text-white py-24 px-6 md:px-12 lg:px-24">
       <div className="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-start">
         
         {/* Portrait */}
         <div className="lg:col-span-3">
-          <div className="w-full max-w-[280px] mx-auto lg:mx-0">
-            <img 
-              src="/oivind-h-solheim.png" 
-              alt="Portrait of Øivind H. Solheim" 
-              className="w-full h-auto object-cover filter grayscale contrast-125"
-            />
+          <div className="w-full max-w-[280px] mx-auto lg:mx-0 bg-brand-light/10">
+            {aboutData.imageUrl ? (
+              <img 
+                src={aboutData.imageUrl} 
+                alt="Portrait of Øivind H. Solheim" 
+                className="w-full h-auto object-cover filter grayscale contrast-125"
+              />
+            ) : (
+              <img 
+                src="/oivind-h-solheim.png" 
+                alt="Portrait of Øivind H. Solheim" 
+                className="w-full h-auto object-cover filter grayscale contrast-125"
+              />
+            )}
           </div>
         </div>
 
         {/* Text bio */}
         <div className="lg:col-span-4 flex flex-col justify-center">
-          <h3 className="text-xs font-sans tracking-[0.2em] font-semibold uppercase text-brand-accent mb-6">OM MEG</h3>
-          <div className="space-y-4 font-sans text-gray-300 font-light leading-relaxed mb-10 text-base">
-            <p>Eg er forfattar, musikar og ein evig nysgjerrig vandrar.</p>
-            <p>Eg trur på krafta i ord, stillheit i naturen og samtalar som utfordrar det etablerte.</p>
-            <p>Dette er mitt rom på nettet.</p>
-            <p>Velkomen inn.</p>
+          <h3 className="text-xs font-sans tracking-[0.2em] font-semibold uppercase text-brand-accent mb-6">{t('ABOUT')}</h3>
+          <div className="space-y-4 font-sans text-gray-300 font-light leading-relaxed mb-10 text-base flex-grow">
+            {language === 'en' ? (
+              aboutData.shortBioEn && aboutData.shortBioEn.split('\n').map((line, i) => (
+                <p key={i}>{line}</p>
+              ))
+            ) : (
+              aboutData.shortBioNo && aboutData.shortBioNo.split('\n').map((line, i) => (
+                <p key={i}>{line}</p>
+              ))
+            )}
           </div>
-          <a href="#" className="inline-flex items-center text-brand-accent hover:text-white transition-colors font-sans text-xs font-semibold tracking-widest uppercase">
-            LES HEILE HISTORIA <ArrowRight className="ml-2 w-4 h-4" />
-          </a>
+          <Link to="/om-meg" className="inline-flex items-center text-brand-accent hover:text-white transition-colors font-sans text-xs font-semibold tracking-widest uppercase mt-auto">
+            {language === 'en' ? 'READ FULL STORY' : 'LES HEILE HISTORIA'} <ArrowRight className="ml-2 w-4 h-4" />
+          </Link>
         </div>
 
         {/* Quote Block */}

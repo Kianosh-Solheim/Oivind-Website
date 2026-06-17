@@ -106,20 +106,13 @@ export default function Romanar() {
                     </h2>
                   </Link>
                   
-                  <div className="flex-grow">
-                    <Link to={`/boker/${book.id}`} className="block">
-                      <div className="text-brand-dark/80 leading-relaxed font-serif whitespace-pre-wrap cursor-pointer transition-all duration-300 line-clamp-4 mb-4" title={language === 'en' ? 'Read more' : 'Les meir'}>
-                        {displayDescription}
-                      </div>
+                  <div className="flex-grow mb-8 animate-fade-in">
+                    <Link 
+                      to={`/boker/${book.id}`}
+                      className="text-xs font-semibold tracking-widest uppercase text-brand-accent hover:text-brand-dark transition-colors text-left inline-flex items-center gap-1"
+                    >
+                      {language === 'en' ? 'Read description' : 'Les omtale'} &rarr;
                     </Link>
-                    {displayDescription.length > 200 && (
-                      <Link 
-                        to={`/boker/${book.id}`}
-                        className="text-xs font-semibold tracking-widest uppercase text-brand-accent hover:text-brand-dark transition-colors text-left mb-8 block"
-                      >
-                        {language === 'en' ? 'Read full description' : 'Les heile omtalen'}
-                      </Link>
-                    )}
                   </div>
                   
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 pt-8 border-t border-gray-100">

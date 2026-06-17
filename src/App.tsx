@@ -9,6 +9,7 @@ import Romanar from './pages/Romanar';
 import RomanView from './pages/RomanView';
 import Admin from './pages/Admin';
 import Dagbok from './pages/Dagbok';
+import OmMeg from './pages/OmMeg';
 import { LanguageProvider } from './context/LanguageContext';
 import VisitorTracker from './components/VisitorTracker';
 
@@ -28,6 +29,7 @@ export default function App() {
               <Route path="/dagbok" element={<Dagbok />} />
               <Route path="/boker" element={<Romanar />} />
               <Route path="/boker/:id" element={<RomanView />} />
+              <Route path="/om-meg" element={<OmMeg />} />
               <Route path="/admin" element={<Admin />} />
               {/* Redirect old English routes to the standard ones */}
               <Route path="/English" element={<Navigate to="/refleksjonar" replace />} />
