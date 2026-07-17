@@ -60,8 +60,7 @@ service cloud.firestore {
     }
 
     match /books/{bookId} {
-      allow get: if (!('authorId' in resource.data) || resource.data.authorId != '') || isAdmin();
-      allow list: if (!('authorId' in resource.data) || resource.data.authorId != '') || isAdmin();
+      allow read: if true;
       
       allow create: if isSignedIn() && isAdmin() &&
                     isValidId(bookId) &&
@@ -131,6 +130,27 @@ service cloud.firestore {
              (!('imageCaption' in data) || (data.imageCaption is string && data.imageCaption.size() <= 1000000)) &&
              (!('translationId' in data) || (data.translationId is string)) &&
              (!('slug' in data) || (data.slug is string));
+    }
+
+    function isValidGalleryPhoto(data) {
+      return data.keys().hasAll(['src', 'alt', 'createdAt']) &&
+             data.src is string && data.src.size() <= 1000000 &&
+             data.alt is string && data.alt.size() <= 10000 &&
+             (!('className' in data) || (data.className is string && data.className.size() <= 200)) &&
+             data.createdAt is timestamp;
+    }
+
+    match /gallery/{photoId} {
+      allow read: if true;
+      allow create: if isSignedIn() && isAdmin() &&
+                    isValidId(photoId) &&
+                    isValidGalleryPhoto(incoming()) &&
+                    incoming().createdAt == request.time;
+      allow update: if isSignedIn() && isAdmin() &&
+                    isValidId(photoId) &&
+                    isValidGalleryPhoto(incoming()) &&
+                    incoming().createdAt == existing().createdAt;
+      allow delete: if isSignedIn() && isAdmin() && isValidId(photoId);
     }
 
     match /diary/{diaryId} {

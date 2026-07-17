@@ -23,7 +23,7 @@ export default function Footer() {
         
         {/* Portrait */}
         <div className="lg:col-span-3">
-          <div className="w-full max-w-[280px] mx-auto lg:mx-0 bg-brand-light/10">
+          <div className="w-full max-w-[280px] mx-auto lg:mx-0">
             {aboutData.imageUrl ? (
               <img 
                 src={aboutData.imageUrl} 

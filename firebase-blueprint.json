@@ -30,6 +30,18 @@
         "authorId": { "type": "string" }
       },
       "required": ["title", "description", "publishedYear", "createdAt", "updatedAt", "authorId"]
+    },
+    "galleryPhoto": {
+      "title": "GalleryPhoto",
+      "description": "An image displayed in the Foto & Natur section.",
+      "type": "object",
+      "properties": {
+        "src": { "type": "string" },
+        "alt": { "type": "string" },
+        "className": { "type": "string" },
+        "createdAt": { "type": "number", "description": "Timestamp" }
+      },
+      "required": ["src", "alt", "createdAt"]
     }
   },
   "firestore": {
@@ -40,6 +52,10 @@
     "books": {
       "schema": { "$ref": "#/entities/book" },
       "description": "Collection of books/novels."
+    },
+    "gallery": {
+      "schema": { "$ref": "#/entities/galleryPhoto" },
+      "description": "Collection of gallery photos."
     }
   }
 }

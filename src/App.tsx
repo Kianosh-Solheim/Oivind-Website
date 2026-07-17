@@ -12,11 +12,13 @@ import Dagbok from './pages/Dagbok';
 import OmMeg from './pages/OmMeg';
 import { LanguageProvider } from './context/LanguageContext';
 import VisitorTracker from './components/VisitorTracker';
+import ScrollToTop from './components/ScrollToTop';
 
 export default function App() {
   return (
     <LanguageProvider>
       <Router>
+        <ScrollToTop />
         <VisitorTracker />
         <div className="min-h-screen bg-white">
           <Header />

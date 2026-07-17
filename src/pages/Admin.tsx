@@ -57,6 +57,14 @@ interface DiaryEntry {
   imageCaption?: string;
 }
 
+interface GalleryPhoto {
+  id?: string;
+  src: string;
+  alt: string;
+  className?: string;
+  createdAt?: any;
+}
+
 export default function Admin() {
   const { user, signInWithGoogle, logout } = useAuth();
   const location = useLocation();
@@ -65,6 +73,7 @@ export default function Admin() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [books, setBooks] = useState<Book[]>([]);
   const [diaries, setDiaries] = useState<DiaryEntry[]>([]);
+  const [galleryPhotos, setGalleryPhotos] = useState<GalleryPhoto[]>([]);
   const [visitors, setVisitors] = useState<number>(0);
   const [pageStats, setPageStats] = useState<any[]>([]);
   
@@ -72,17 +81,20 @@ export default function Admin() {
   const [isComposingDiary, setIsComposingDiary] = useState(false);
   const [showImagePicker, setShowImagePicker] = useState(false);
   const [showBookImagePicker, setShowBookImagePicker] = useState(false);
+  const [showGalleryImagePicker, setShowGalleryImagePicker] = useState(false);
   const [editingArticleId, setEditingArticleId] = useState<string | null>(null);
   const [originalArticle, setOriginalArticle] = useState<Article | null>(null);
   const [editingDiaryId, setEditingDiaryId] = useState<string | null>(null);
   const [originalDiary, setOriginalDiary] = useState<DiaryEntry | null>(null);
   const [editingBookId, setEditingBookId] = useState<string | null>(null);
+  const [editingPhotoId, setEditingPhotoId] = useState<string | null>(null);
+  const [photoForm, setPhotoForm] = useState({ src: '', alt: '' });
   const [articleFilter, setArticleFilter] = useState('all');
   const [diaryFilter, setDiaryFilter] = useState('all');
   const [articleForm, setArticleForm] = useState({ title: '', content: '', published: true, language: 'no', slug: '', imageUrl: '', imageCaption: '', translationId: '' });
   const [infoDialog, setInfoDialog] = useState<{title: string, content: React.ReactNode} | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{title: string, message: string, onConfirm: () => void} | null>(null);
-  const [dashboardTab, setDashboardTab] = useState<'overview' | 'articles' | 'books' | 'diary' | 'files' | 'about'>('overview');
+  const [dashboardTab, setDashboardTab] = useState<'overview' | 'articles' | 'books' | 'diary' | 'files' | 'about' | 'photos'>('overview');
   const [isSaving, setIsSaving] = useState(false);
   
   const [bookForm, setBookForm] = useState<Book>({ title: '', description: '', publishedYear: new Date().getFullYear(), coverImageUrl: '', isbn: '', buyLink: '', pageCount: 0, language: 'no', titleEn: '', descriptionEn: '', buyLinkEn: '' });
@@ -96,7 +108,7 @@ export default function Admin() {
       
       const params = new URLSearchParams(location.search);
       const tabParam = params.get('tab');
-      if (tabParam === 'books' || tabParam === 'files' || tabParam === 'articles' || tabParam === 'diary' || tabParam === 'about') {
+      if (tabParam === 'books' || tabParam === 'files' || tabParam === 'articles' || tabParam === 'diary' || tabParam === 'about' || tabParam === 'photos') {
         setDashboardTab(tabParam as any);
       }
       
@@ -162,6 +174,9 @@ export default function Admin() {
       const diariesSnap = await getDocs(query(collection(db, 'diary'), orderBy('createdAt', 'desc')));
       setDiaries(diariesSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as DiaryEntry)));
       
+      const gallerySnap = await getDocs(query(collection(db, 'gallery'), orderBy('createdAt', 'desc')));
+      setGalleryPhotos(gallerySnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as GalleryPhoto)));
+      
       const aboutDoc = await getDoc(doc(db, 'settings', 'about'));
       if (aboutDoc.exists()) {
         setAboutForm(aboutDoc.data() as AboutSettings);
@@ -199,6 +214,60 @@ export default function Admin() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const saveGalleryPhoto = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!photoForm.src.trim() || !user || isSaving) return;
+    setIsSaving(true);
+    try {
+      const { serverTimestamp } = await import('firebase/firestore');
+      if (editingPhotoId) {
+        await updateDoc(doc(db, 'gallery', editingPhotoId), {
+          src: photoForm.src,
+          alt: photoForm.alt || 'Galleribilde'
+        });
+        setEditingPhotoId(null);
+        setPhotoForm({ src: '', alt: '' });
+        setInfoDialog({
+          title: "Bilde oppdatert",
+          content: <p>Bildet har blitt oppdatert.</p>
+        });
+      } else {
+        await addDoc(collection(db, 'gallery'), {
+          src: photoForm.src,
+          alt: photoForm.alt || 'Galleribilde',
+          createdAt: serverTimestamp()
+        });
+        setPhotoForm({ src: '', alt: '' });
+        setInfoDialog({
+          title: "Bilde lagt til",
+          content: <p>Bildet er lagt til i Foto & Natur-galleriet.</p>
+        });
+      }
+      loadData();
+    } catch (err) {
+      console.error("Klarte ikkje å lagre bilde", err);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const deleteGalleryPhoto = async (id: string) => {
+    if (!user) return;
+    setConfirmDialog({
+      title: 'Slett bilde',
+      message: 'Er du sikker på at du vil slette dette bildet frå galleriet?',
+      onConfirm: async () => {
+        try {
+          await deleteDoc(doc(db, 'gallery', id));
+          setConfirmDialog(null);
+          loadData();
+        } catch (err) {
+          console.error("Klarte ikkje å slette bilde", err);
+        }
+      }
+    });
   };
 
   const saveArticle = async () => {
@@ -973,6 +1042,12 @@ export default function Admin() {
             >
               Om meg
             </button>
+            <button 
+              onClick={() => setDashboardTab('photos')} 
+              className={`text-left px-4 py-3 text-xs tracking-widest uppercase font-semibold transition-colors shrink-0 ${dashboardTab === 'photos' ? 'bg-brand-dark text-white' : 'text-brand-muted hover:text-brand-dark hover:bg-gray-50'}`}
+            >
+              Foto & Natur
+            </button>
           </nav>
         </aside>
 
@@ -1493,12 +1568,160 @@ export default function Admin() {
             </section>
           )}
 
+          {dashboardTab === 'photos' && (
+            <section className="mb-12">
+              <div className="flex flex-col md:flex-row md:justify-between md:items-end border-b border-gray-200 pb-4 mb-6 gap-4">
+                <div>
+                  <h2 className="text-2xl font-serif text-brand-dark mb-2">Foto & Natur Galleri</h2>
+                  <p className="text-sm text-brand-muted">
+                    Her kan du legge inn og redigere bilder som vises i Foto & Natur-galleriet på nettstaden.
+                  </p>
+                </div>
+              </div>
+
+              {/* ADD/EDIT PHOTO FORM */}
+              <form onSubmit={saveGalleryPhoto} className="space-y-8 bg-white p-6 md:p-10 border border-gray-100 shadow-sm mb-12">
+                <h3 className="text-lg font-serif text-brand-dark border-b border-gray-100 pb-3">
+                  {editingPhotoId ? 'Rediger bildebeskrivelse' : 'Legg til nytt bilde'}
+                </h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="space-y-4">
+                    <label className="block text-xs tracking-widest text-brand-dark font-sans font-semibold uppercase">Bilde URL</label>
+                    <div className="flex gap-2">
+                      <input 
+                        type="text" 
+                        required
+                        value={photoForm.src} 
+                        onChange={e => setPhotoForm(prev => ({ ...prev, src: e.target.value }))}
+                        className="flex-1 border border-gray-200 p-4 font-sans text-brand-dark focus:outline-none focus:border-brand-dark transition-colors bg-brand-light/30 text-sm"
+                        placeholder="Velg frå filer eller lim inn URL" 
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowGalleryImagePicker(true)}
+                        className="px-4 bg-brand-dark text-white text-xs tracking-widest uppercase font-semibold hover:bg-black transition-colors"
+                      >
+                        Velg bilde
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <label className="block text-xs tracking-widest text-brand-dark font-sans font-semibold uppercase">Bildebeskrivelse / Alt-tekst</label>
+                    <input 
+                      type="text" 
+                      required
+                      value={photoForm.alt} 
+                      onChange={e => setPhotoForm(prev => ({ ...prev, alt: e.target.value }))}
+                      className="w-full border border-gray-200 p-4 font-sans text-brand-dark focus:outline-none focus:border-brand-dark transition-colors bg-brand-light/30 text-sm"
+                      placeholder="F.eks. Fjord i solnedgang" 
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {photoForm.src && (
+                    <div className="space-y-2">
+                      <label className="block text-xs tracking-widest text-brand-dark font-sans font-semibold uppercase">Forhandsvising</label>
+                      <div className="w-full max-w-[200px] aspect-[4/3] bg-gray-100 border border-gray-200 p-1">
+                        <img src={photoForm.src} className="w-full h-full object-cover" alt="Preview" referrerPolicy="no-referrer" />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-6 border-t border-gray-100 flex justify-end gap-4">
+                  {editingPhotoId && (
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        setEditingPhotoId(null);
+                        setPhotoForm({ src: '', alt: '' });
+                      }}
+                      className="px-6 py-4 border border-gray-200 text-brand-muted text-xs tracking-widest uppercase font-semibold hover:bg-gray-50 transition-colors"
+                    >
+                      Avbryt redigering
+                    </button>
+                  )}
+                  <button 
+                    type="submit"
+                    disabled={isSaving || !photoForm.src}
+                    className="px-8 py-4 bg-brand-dark text-white text-xs tracking-widest uppercase font-semibold hover:bg-black transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center min-w-[200px]"
+                  >
+                    {isSaving ? (
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <>{editingPhotoId ? 'OPPDATER BILDE' : 'LEGG TIL I GALLERI'} {editingPhotoId ? <Save className="ml-2 w-4 h-4" /> : <Plus className="ml-2 w-4 h-4" />}</>
+                    )}
+                  </button>
+                </div>
+              </form>
+
+              {/* LIST OF PHOTOS */}
+              <div className="bg-white p-6 md:p-10 border border-gray-100 shadow-sm">
+                <h3 className="text-lg font-serif text-brand-dark border-b border-gray-100 pb-3 mb-6">Bilde i galleriet ({galleryPhotos.length})</h3>
+                
+                {galleryPhotos.length === 0 ? (
+                  <p className="text-sm text-brand-muted py-8 text-center bg-gray-50/50">
+                    Ingen bilete er lagt til enno. Galleriet viser førebels standardbilete.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                    {galleryPhotos.map(photo => (
+                      <div key={photo.id} className="border border-gray-200 p-3 flex flex-col justify-between hover:shadow-md transition-shadow">
+                        <div className="space-y-3">
+                          <div className="aspect-[4/3] bg-gray-50 overflow-hidden relative">
+                            <img src={photo.src} className="w-full h-full object-cover" alt={photo.alt} referrerPolicy="no-referrer" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-sans font-semibold text-brand-dark truncate">{photo.alt}</p>
+                          </div>
+                        </div>
+                        <div className="pt-4 mt-4 border-t border-gray-100 flex justify-between items-center">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingPhotoId(photo.id!);
+                              setPhotoForm({ src: photo.src, alt: photo.alt });
+                              window.scrollTo({ top: 100, behavior: 'smooth' });
+                            }}
+                            className="text-xs text-brand-dark hover:text-black font-semibold tracking-wider flex items-center gap-1"
+                          >
+                            REDIGER
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteGalleryPhoto(photo.id!)}
+                            className="text-xs text-red-600 hover:text-red-800 font-semibold tracking-wider flex items-center gap-1"
+                          >
+                            SLETT
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
           {showBookImagePicker && (
             <ImagePickerModal 
               onClose={() => setShowBookImagePicker(false)} 
               onSelect={(url) => {
                 setBookForm({...bookForm, coverImageUrl: url});
                 setShowBookImagePicker(false);
+              }}
+            />
+          )}
+
+          {showGalleryImagePicker && (
+            <ImagePickerModal 
+              onClose={() => setShowGalleryImagePicker(false)} 
+              onSelect={(url) => {
+                setPhotoForm({...photoForm, src: url});
+                setShowGalleryImagePicker(false);
               }}
             />
           )}
