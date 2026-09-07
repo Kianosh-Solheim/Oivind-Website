@@ -118,10 +118,14 @@ export default function Admin() {
   useEffect(() => {
     if (user) {
       loadData();
-      
+    }
+  }, [user]);
+
+  useEffect(() => {
+    if (user) {
       const params = new URLSearchParams(location.search);
       const tabParam = params.get('tab');
-      if (tabParam === 'books' || tabParam === 'files' || tabParam === 'articles' || tabParam === 'diary' || tabParam === 'about' || tabParam === 'photos') {
+      if (tabParam === 'books' || tabParam === 'files' || tabParam === 'articles' || tabParam === 'diary' || tabParam === 'about' || tabParam === 'photos' || tabParam === 'orders') {
         setDashboardTab(tabParam as any);
       }
       
