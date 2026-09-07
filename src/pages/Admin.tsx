@@ -35,6 +35,18 @@ interface Book {
   titleEn?: string;
   descriptionEn?: string;
   buyLinkEn?: string;
+  price?: number;
+}
+
+interface Order {
+  id?: string;
+  bookId: string;
+  bookTitle: string;
+  customerName: string;
+  customerEmail: string;
+  amount: number;
+  status: string;
+  createdAt: any;
 }
 
 interface AboutSettings {
@@ -74,6 +86,7 @@ export default function Admin() {
   const [books, setBooks] = useState<Book[]>([]);
   const [diaries, setDiaries] = useState<DiaryEntry[]>([]);
   const [galleryPhotos, setGalleryPhotos] = useState<GalleryPhoto[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [visitors, setVisitors] = useState<number>(0);
   const [pageStats, setPageStats] = useState<any[]>([]);
   
@@ -94,10 +107,10 @@ export default function Admin() {
   const [articleForm, setArticleForm] = useState({ title: '', content: '', published: true, language: 'no', slug: '', imageUrl: '', imageCaption: '', translationId: '' });
   const [infoDialog, setInfoDialog] = useState<{title: string, content: React.ReactNode} | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{title: string, message: string, onConfirm: () => void} | null>(null);
-  const [dashboardTab, setDashboardTab] = useState<'overview' | 'articles' | 'books' | 'diary' | 'files' | 'about' | 'photos'>('overview');
+  const [dashboardTab, setDashboardTab] = useState<'overview' | 'articles' | 'books' | 'diary' | 'files' | 'about' | 'photos' | 'orders'>('overview');
   const [isSaving, setIsSaving] = useState(false);
   
-  const [bookForm, setBookForm] = useState<Book>({ title: '', description: '', publishedYear: new Date().getFullYear(), coverImageUrl: '', isbn: '', buyLink: '', pageCount: 0, language: 'no', titleEn: '', descriptionEn: '', buyLinkEn: '' });
+  const [bookForm, setBookForm] = useState<Book>({ title: '', description: '', publishedYear: new Date().getFullYear(), coverImageUrl: '', isbn: '', buyLink: '', pageCount: 0, language: 'no', titleEn: '', descriptionEn: '', buyLinkEn: '', price: 0 });
 
   const [diaryForm, setDiaryForm] = useState<DiaryEntry>({ title: '', content: '', published: true, language: 'both', slug: '', imageUrl: '', imageCaption: '' });
   const [aboutForm, setAboutForm] = useState<AboutSettings>({ bioNo: '', bioEn: '', shortBioNo: '', shortBioEn: '', imageUrl: '' });
@@ -176,6 +189,9 @@ export default function Admin() {
       
       const gallerySnap = await getDocs(query(collection(db, 'gallery'), orderBy('createdAt', 'desc')));
       setGalleryPhotos(gallerySnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as GalleryPhoto)));
+      
+      const ordersSnap = await getDocs(query(collection(db, 'orders'), orderBy('createdAt', 'desc')));
+      setOrders(ordersSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Order)));
       
       const aboutDoc = await getDoc(doc(db, 'settings', 'about'));
       if (aboutDoc.exists()) {
@@ -340,7 +356,8 @@ export default function Admin() {
       language: book.language || 'no',
       titleEn: book.titleEn || '',
       descriptionEn: book.descriptionEn || '',
-      buyLinkEn: book.buyLinkEn || ''
+      buyLinkEn: book.buyLinkEn || '',
+      price: book.price || 0
     });
     setEditingBookId(book.id || null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -354,6 +371,7 @@ export default function Admin() {
       const bookData = {
         ...bookForm,
         publishedYear: Number(bookForm.publishedYear),
+        price: Number(bookForm.price || 0),
         updatedAt: serverTimestamp()
       };
 
@@ -366,7 +384,7 @@ export default function Admin() {
           createdAt: serverTimestamp(),
         });
       }
-      setBookForm({ title: '', description: '', publishedYear: new Date().getFullYear(), coverImageUrl: '', isbn: '', buyLink: '', pageCount: 0, language: 'no', titleEn: '', descriptionEn: '', buyLinkEn: '' });
+      setBookForm({ title: '', description: '', publishedYear: new Date().getFullYear(), coverImageUrl: '', isbn: '', buyLink: '', pageCount: 0, language: 'no', titleEn: '', descriptionEn: '', buyLinkEn: '', price: 0 });
       setEditingBookId(null);
       loadData();
     } catch (e) {
@@ -1048,6 +1066,12 @@ export default function Admin() {
             >
               Foto & Natur
             </button>
+            <button 
+              onClick={() => setDashboardTab('orders')} 
+              className={`text-left px-4 py-3 text-xs tracking-widest uppercase font-semibold transition-colors shrink-0 ${dashboardTab === 'orders' ? 'bg-brand-dark text-white' : 'text-brand-muted hover:text-brand-dark hover:bg-gray-50'}`}
+            >
+              Bestillingar
+            </button>
           </nav>
         </aside>
 
@@ -1326,10 +1350,16 @@ export default function Admin() {
                   value={bookForm.pageCount || ''} onChange={e => setBookForm({...bookForm, pageCount: parseInt(e.target.value) || 0})}
                   className="w-full p-3 text-sm border border-gray-200 focus:border-brand-accent focus:ring-1 focus:ring-brand-accent bg-white outline-none transition-colors" />
               </div>
-              <input 
-                type="text" placeholder="ISBN (valfritt)"
-                value={bookForm.isbn || ''} onChange={e => setBookForm({...bookForm, isbn: e.target.value})}
-                className="w-full p-3 text-sm border border-gray-200 focus:border-brand-accent focus:ring-1 focus:ring-brand-accent bg-white outline-none transition-colors" />
+              <div className="grid grid-cols-2 gap-4 mt-4">
+                <input 
+                  type="text" placeholder="ISBN (valfritt)"
+                  value={bookForm.isbn || ''} onChange={e => setBookForm({...bookForm, isbn: e.target.value})}
+                  className="w-full p-3 text-sm border border-gray-200 focus:border-brand-accent focus:ring-1 focus:ring-brand-accent bg-white outline-none transition-colors" />
+                <input 
+                  type="number" placeholder="Pris i NOK (0 = ikkje til sals)"
+                  value={bookForm.price || ''} onChange={e => setBookForm({...bookForm, price: parseInt(e.target.value) || 0})}
+                  className="w-full p-3 text-sm border border-gray-200 focus:border-brand-accent focus:ring-1 focus:ring-brand-accent bg-white outline-none transition-colors" />
+              </div>
               <button type="submit" disabled={isSaving} className={`w-full py-3 text-white uppercase tracking-widest font-semibold text-xs mt-2 transition-colors ${isSaving ? 'bg-gray-400 cursor-not-allowed' : 'bg-brand-dark hover:bg-black'}`}>
                 {isSaving ? 'LAGRAR...' : (editingBookId ? 'OPPDATER BOK' : 'LEGG TIL BOK')}
               </button>
@@ -1702,6 +1732,54 @@ export default function Admin() {
                     ))}
                   </div>
                 )}
+              </div>
+            </section>
+          )}
+
+          {/* ORDERS MANAGE */}
+          {dashboardTab === 'orders' && (
+            <section className="mb-12">
+              <h2 className="text-2xl font-serif text-brand-dark mb-6 border-b border-gray-200 pb-4">Bestillingar</h2>
+              
+              <div className="bg-white border border-gray-100 shadow-sm overflow-hidden">
+                <div className="overflow-x-auto w-full">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-100 text-[10px] uppercase tracking-widest text-brand-muted font-semibold">
+                        <th className="p-4 font-semibold">Dato</th>
+                        <th className="p-4 font-semibold">Kunde</th>
+                        <th className="p-4 font-semibold">Bok</th>
+                        <th className="p-4 font-semibold text-right">Beløp</th>
+                        <th className="p-4 font-semibold text-right">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {orders.map(order => (
+                        <tr key={order.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                          <td className="p-4 font-mono text-xs text-brand-dark">
+                            {order.createdAt ? new Date(order.createdAt.seconds * 1000).toLocaleDateString() : '-'}
+                          </td>
+                          <td className="p-4 text-sm">
+                            <div className="font-semibold">{order.customerName}</div>
+                            <div className="text-xs text-brand-muted">{order.customerEmail}</div>
+                          </td>
+                          <td className="p-4 text-sm text-brand-dark">{order.bookTitle}</td>
+                          <td className="p-4 text-sm text-right">{(order.amount / 100).toFixed(2)} NOK</td>
+                          <td className="p-4 text-right">
+                            <span className={`px-2 py-1 text-[10px] uppercase tracking-widest font-semibold rounded-sm inline-flex items-center gap-1 ${order.status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-brand-accent/10 text-brand-accent'}`}>
+                              {order.status === 'paid' ? 'Betalt' : order.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                      {orders.length === 0 && (
+                        <tr>
+                          <td colSpan={5} className="p-8 text-center text-sm text-brand-muted">Ingen bestillingar enno.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </section>
           )}

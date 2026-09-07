@@ -184,5 +184,10 @@ service cloud.firestore {
       allow read: if true;
       allow write: if true;
     }
+
+    match /orders/{orderId} {
+      allow read, update, delete: if isAdmin();
+      allow create: if true;
+    }
   }
 }
