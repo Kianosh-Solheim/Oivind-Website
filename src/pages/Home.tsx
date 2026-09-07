@@ -41,9 +41,9 @@ export default function Home() {
         >
           <motion.h2 variants={itemVariants} className="text-4xl md:text-5xl lg:text-6xl font-serif leading-tight">
             {language === 'en' ? (
-              <>About the life we live.<br />And the future we choose to create.</>
+              <>I don't write about the future.<br />I write about people living while the future is made.</>
             ) : (
-              <>Om livet vi lever.<br />Og framtida vi vel å skapa.</>
+              <>Eg skriv ikkje om framtida.<br />Eg skriv om menneske som lever medan framtida blir til.</>
             )}
           </motion.h2>
           <motion.div variants={itemVariants} className="mt-12">
@@ -70,7 +70,7 @@ export default function Home() {
           <p className="text-base md:text-lg text-brand-dark/80 leading-relaxed font-sans mb-10">
             {language === 'en' ? 
               'To put into words what worries me, inspires me, and what needs to be said out loud. My texts spring from nature, from people, from the times we live in – and from the hope that we can create a better tomorrow.' : 
-              'For å sette ord på det som uroar meg, inspirerer meg, og det som må seiast høgt. Mine tekstar spring ut frå naturen, frå menneske, frå tidene vi lever i – og frå håpet om at vi kan skape ein betre morgondag.'
+              'For å setja ord på det som uroar meg, inspirerer meg, og det som må seiast høgt. Tekstane mine spring ut frå naturen, frå menneske, frå tida vi lever i – og frå håpet om at vi kan skapa ein betre morgondag.'
             }
           </p>
           <Link to="/om-meg" className="inline-flex items-center text-brand-accent hover:text-brand-dark transition-colors font-sans text-xs font-semibold tracking-widest uppercase">
@@ -112,8 +112,8 @@ export default function Home() {
           </motion.span>
           <p className="text-2xl md:text-3xl lg:text-4xl font-serif italic text-brand-dark leading-snug">
             {language === 'en' ? 
-              'Technology can amplify us. But only humanity can save us.' : 
-              'Teknologien kan forsterka oss. Men berre menneskelegheit kan redde oss.'
+              'Technology can amplify us, humanity can save us.' : 
+              'Teknologien kan forsterka oss, menneskelegheit kan redda oss.'
             }
           </p>
           <p className="text-3xl md:text-5xl font-signature text-brand-dark mt-8 text-right flex justify-end items-center gap-4">
