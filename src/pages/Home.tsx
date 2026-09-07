@@ -48,7 +48,7 @@ export default function Home() {
           </motion.h2>
           <motion.div variants={itemVariants} className="mt-12">
             <Link to="/refleksjonar" className="border border-white hover:bg-white hover:text-brand-dark transition-all duration-300 text-white font-sans text-xs tracking-[0.15em] uppercase py-4 px-8 inline-block">
-              {language === 'en' ? 'READ MY LATEST REFLECTIONS' : 'LES MINE SISTE REFLEKSJONAR'}
+              {language === 'en' ? 'READ MY LATEST REFLECTIONS' : 'LES DEI SISTE REFLEKSJONANE MINE'}
             </Link>
           </motion.div>
         </motion.div>
