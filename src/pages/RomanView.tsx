@@ -30,6 +30,11 @@ export default function RomanView() {
     fetchBook();
   }, [id]);
 
+  const displayTitle = language === 'en' && book?.language === 'both' && book?.titleEn ? book.titleEn : book?.title;
+  const displayDescription = language === 'en' && book?.language === 'both' && book?.descriptionEn ? book.descriptionEn : book?.description;
+  const displayBuyLink = language === 'en' && book?.language === 'both' && book?.buyLinkEn ? book.buyLinkEn : book?.buyLink;
+  const [isRedirecting, setIsRedirecting] = useState(false);
+
   if (loading) {
     return (
       <div className="bg-brand-surface min-h-[80vh] flex items-center justify-center">
@@ -48,12 +53,6 @@ export default function RomanView() {
       </div>
     );
   }
-
-  const displayTitle = language === 'en' && book.language === 'both' && book.titleEn ? book.titleEn : book.title;
-  const displayDescription = language === 'en' && book.language === 'both' && book.descriptionEn ? book.descriptionEn : book.description;
-  const displayBuyLink = language === 'en' && book.language === 'both' && book.buyLinkEn ? book.buyLinkEn : book.buyLink;
-
-  const [isRedirecting, setIsRedirecting] = useState(false);
 
   const handleBuyDirectly = async () => {
     setIsRedirecting(true);
