@@ -33,7 +33,6 @@ export default function RomanView() {
   const displayTitle = language === 'en' && book?.language === 'both' && book?.titleEn ? book.titleEn : book?.title;
   const displayDescription = language === 'en' && book?.language === 'both' && book?.descriptionEn ? book.descriptionEn : book?.description;
   const displayBuyLink = language === 'en' && book?.language === 'both' && book?.buyLinkEn ? book.buyLinkEn : book?.buyLink;
-  const [isRedirecting, setIsRedirecting] = useState(false);
 
   if (loading) {
     return (
@@ -53,38 +52,6 @@ export default function RomanView() {
       </div>
     );
   }
-
-  const handleBuyDirectly = async () => {
-    setIsRedirecting(true);
-    try {
-      const response = await fetch('/api/create-checkout-session', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          bookId: book.id,
-          bookTitle: displayTitle,
-          price: book.price,
-          successUrl: `${window.location.origin}/success`,
-          cancelUrl: window.location.href,
-        }),
-      });
-      
-      const session = await response.json();
-      
-      if (session.url) {
-        window.location.href = session.url;
-      } else {
-        alert(session.error || 'Noko gjekk gale ved oppretting av betaling. Stripe er kanskje ikkje konfigurert.');
-        setIsRedirecting(false);
-      }
-    } catch (err) {
-      console.error(err);
-      alert('Noko gjekk gale');
-      setIsRedirecting(false);
-    }
-  };
 
   return (
     <div className="bg-brand-surface min-h-screen pb-32">
@@ -138,29 +105,15 @@ export default function RomanView() {
               </div>
               
               <div className="flex flex-wrap gap-4 items-center justify-end">
-                {book.price > 0 && (
-                  <button 
-                    onClick={handleBuyDirectly}
-                    disabled={isRedirecting}
-                    className="inline-flex items-center justify-center bg-brand-dark hover:bg-black text-white px-6 py-3 text-xs font-semibold tracking-widest uppercase transition-colors shrink-0 disabled:opacity-50"
-                  >
-                    {isRedirecting ? (
-                      <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin mr-2" />
-                    ) : (
-                      <ShoppingBag className="w-4 h-4 mr-2" />
-                    )}
-                    {language === 'en' ? `Buy directly (${book.price} NOK)` : `Kjøp direkte (${book.price} NOK)`}
-                  </button>
-                )}
                 {displayBuyLink && (
                   <a 
                     href={displayBuyLink} 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-brand-dark border border-gray-200 px-6 py-3 text-xs font-semibold tracking-widest uppercase transition-colors shrink-0"
+                    className="inline-flex items-center justify-center bg-brand-dark hover:bg-black text-white px-6 py-3 text-xs font-semibold tracking-widest uppercase transition-colors shrink-0"
                   >
                     <ShoppingBag className="w-4 h-4 mr-2" />
-                    {language === 'en' ? 'Other stores' : 'Andre butikkar'}
+                    {language === 'en' ? 'Buy Book' : 'Kjøp boka'}
                   </a>
                 )}
               </div>

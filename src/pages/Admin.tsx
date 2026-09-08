@@ -1745,45 +1745,24 @@ export default function Admin() {
             <section className="mb-12">
               <h2 className="text-2xl font-serif text-brand-dark mb-6 border-b border-gray-200 pb-4">Bestillingar</h2>
               
-              <div className="bg-white border border-gray-100 shadow-sm overflow-hidden">
-                <div className="overflow-x-auto w-full">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-gray-50 border-b border-gray-100 text-[10px] uppercase tracking-widest text-brand-muted font-semibold">
-                        <th className="p-4 font-semibold">Dato</th>
-                        <th className="p-4 font-semibold">Kunde</th>
-                        <th className="p-4 font-semibold">Bok</th>
-                        <th className="p-4 font-semibold text-right">Beløp</th>
-                        <th className="p-4 font-semibold text-right">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {orders.map(order => (
-                        <tr key={order.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                          <td className="p-4 font-mono text-xs text-brand-dark">
-                            {order.createdAt ? new Date(order.createdAt.seconds * 1000).toLocaleDateString() : '-'}
-                          </td>
-                          <td className="p-4 text-sm">
-                            <div className="font-semibold">{order.customerName}</div>
-                            <div className="text-xs text-brand-muted">{order.customerEmail}</div>
-                          </td>
-                          <td className="p-4 text-sm text-brand-dark">{order.bookTitle}</td>
-                          <td className="p-4 text-sm text-right">{(order.amount / 100).toFixed(2)} NOK</td>
-                          <td className="p-4 text-right">
-                            <span className={`px-2 py-1 text-[10px] uppercase tracking-widest font-semibold rounded-sm inline-flex items-center gap-1 ${order.status === 'paid' ? 'bg-green-100 text-green-800' : 'bg-brand-accent/10 text-brand-accent'}`}>
-                              {order.status === 'paid' ? 'Betalt' : order.status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                      {orders.length === 0 && (
-                        <tr>
-                          <td colSpan={5} className="p-8 text-center text-sm text-brand-muted">Ingen bestillingar enno.</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
+              <div className="bg-white border border-gray-100 shadow-sm p-12 text-center">
+                <div className="mb-8">
+                  <div className="w-16 h-16 mx-auto bg-[#635BFF]/10 rounded-full flex items-center justify-center mb-6">
+                    <svg className="w-8 h-8 text-[#635BFF]" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                  </div>
+                  <h3 className="text-2xl font-serif text-brand-dark mb-3">Ordrar vert handterte av Stripe</h3>
+                  <p className="text-sm text-brand-muted max-w-md mx-auto leading-relaxed">
+                    Sidan nettsida di køyrer statisk (t.d. på GitHub Pages), vert all kundeinformasjon, adresser og betalingar lagra direkte hjå Stripe.
+                  </p>
                 </div>
+                <a 
+                  href="https://dashboard.stripe.com/payments" 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center bg-[#635BFF] hover:bg-[#4B45D6] text-white px-8 py-4 text-xs font-semibold tracking-widest uppercase transition-colors"
+                >
+                  Opne Stripe Dashbord
+                </a>
               </div>
             </section>
           )}
