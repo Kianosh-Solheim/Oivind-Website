@@ -1,177 +1,82 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if false;
+
+    // Sjekkar om brukaren er innlogga
+    function isSignedIn() {
+      return request.auth != null;
     }
 
-    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
-    function incoming() { return request.resource.data; }
-    function existing() { return resource.data; }
-    function isSignedIn() { return request.auth != null; }
-    
-    // For a portfolio, user can just write if they are the first user, or their email matches a hardcoded env. We'll use the email check.
-    // Or we let anyone with a specific email be admin.
-    function isAdmin() { 
-      return isSignedIn() && (request.auth.token.email.lower() == 'kianoshsolheim@gmail.com' || request.auth.token.email.lower() == 'oivindsolheim@gmail.com');
-    }
-    
-    function isValidArticle(data) {
-      return data.keys().hasAll(['title', 'content', 'createdAt', 'updatedAt', 'published']) &&
-             data.keys().size() >= 5 &&
-             data.title is string && data.title.size() <= 200 && data.title.size() > 0 &&
-             data.content is string && data.content.size() <= 5000000 &&
-             data.createdAt is timestamp &&
-             data.updatedAt is timestamp &&
-             data.published is bool &&
-             (!('authorId' in data) || data.authorId is string) &&
-             (!('language' in data) || (data.language is string && data.language.size() <= 10)) &&
-             (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 1000000)) &&
-             (!('slug' in data) || (data.slug is string && data.slug.size() <= 200));
+    // Berre de som eig nettsida har administratortilgang
+    function isAdmin() {
+      return isSignedIn() && 
+             request.auth.token.email != null && (
+               request.auth.token.email.lower() == 'kianoshsolheim@gmail.com' ||
+               request.auth.token.email.lower() == 'oivindsolheim@gmail.com'
+             );
     }
 
+    // Artiklar: Alle kan lese publiserte artiklar, berre admin kan redigere/slette/sjå utkast
     match /articles/{articleId} {
-      allow get: if resource.data.published == true || isAdmin();
-      allow list: if resource.data.published == true || isAdmin();
-      
-      allow create: if isSignedIn() && isAdmin() &&
-                    isValidId(articleId) &&
-                    isValidArticle(incoming());
-                    
-      allow update: if isSignedIn() && isAdmin() &&
-                    isValidId(articleId) &&
-                    isValidArticle(incoming());
-                    
-      allow delete: if isSignedIn() && isAdmin() && isValidId(articleId);
-    }
-    
-    function isValidBook(data) {
-      return data.keys().hasAll(['title', 'description', 'publishedYear', 'createdAt', 'updatedAt']) &&
-             data.title is string && data.title.size() <= 500 && data.title.size() > 0 &&
-             data.description is string && data.description.size() <= 500000 &&
-             data.publishedYear is number &&
-             data.createdAt is timestamp &&
-             data.updatedAt is timestamp &&
-             (!('authorId' in data) || data.authorId is string);
+      allow read: if resource.data.published == true || isAdmin();
+      allow write: if isAdmin();
     }
 
+    // Bøker: Alle kan sjå bøkene, berre admin kan legge til eller endre
     match /books/{bookId} {
       allow read: if true;
-      
-      allow create: if isSignedIn() && isAdmin() &&
-                    isValidId(bookId) &&
-                    isValidBook(incoming());
-                    
-      allow update: if isSignedIn() && isAdmin() &&
-                    isValidId(bookId) &&
-                    isValidBook(incoming()) &&
-                    (!('authorId' in existing()) || incoming().authorId == existing().authorId);
-                    
-      allow delete: if isSignedIn() && isAdmin() && isValidId(bookId);
-    }
-    function isValidImageAsset(data) {
-      return data.keys().hasAll(['filename', 'url', 'createdAt', 'authorId']) &&
-             data.filename is string && data.filename.size() <= 200 && data.filename.size() > 0 &&
-             data.url is string && data.url.size() <= 1000000 &&
-             data.createdAt is timestamp &&
-             data.authorId is string;
+      allow write: if isAdmin();
     }
 
+    // Biletarkiv: Alle kan sjå bilete, berre admin kan laste opp eller slette
     match /images/{imageId} {
-      allow get: if true;
-      allow list: if true;
-      
-      allow create: if isSignedIn() && isAdmin() &&
-                    isValidId(imageId) &&
-                    isValidImageAsset(incoming());
-                    
-      allow delete: if isSignedIn() && isAdmin() && isValidId(imageId);
-    }
-    
-    function isValidComment(data) {
-      return data.keys().hasAll(['articleId', 'userId', 'userName', 'content', 'createdAt']) &&
-             data.articleId is string &&
-             data.userId is string && data.userId == request.auth.uid &&
-             data.userName is string &&
-             data.content is string && data.content.size() <= 10000 && data.content.size() > 0 &&
-             (!('userAvatar' in data) || data.userAvatar is string) &&
-             (!('quote' in data) || data.quote is string || data.quote == null) &&
-             data.createdAt is timestamp;
-    }
-
-    match /comments/{commentId} {
       allow read: if true;
-      allow create: if isSignedIn() &&
-                    ((isValidComment(incoming()) && incoming().createdAt == request.time) || isAdmin());
-      allow update: if isSignedIn() && (incoming().userId == request.auth.uid && isValidComment(incoming()) || isAdmin());
-      allow delete: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow write: if isAdmin();
     }
 
-    function isValidDiary(data) {
-      return data.keys().hasAll(['title', 'content', 'createdAt', 'updatedAt']) &&
-             data.title is string && data.title.size() <= 200 &&
-             data.content is string && data.content.size() <= 5000000 &&
-             (!('language' in data) || (data.language is string && (data.language == 'no' || data.language == 'en' || data.language == 'both'))) &&
-             data.createdAt is timestamp &&
-             data.updatedAt is timestamp &&
-             (!('authorId' in data) || data.authorId is string) &&
-             (!('published' in data) || data.published is bool) &&
-             (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 1000000)) &&
-             (!('imageCaption' in data) || (data.imageCaption is string && data.imageCaption.size() <= 1000000)) &&
-             (!('translationId' in data) || (data.translationId is string)) &&
-             (!('slug' in data) || (data.slug is string));
+    // Dagbok: Berre publiserte kan lesast av alle, admin styrer alt
+    match /diary/{diaryId} {
+      allow read: if resource.data.published == true || isAdmin();
+      allow write: if isAdmin();
     }
 
-    function isValidGalleryPhoto(data) {
-      return data.keys().hasAll(['src', 'alt', 'createdAt']) &&
-             data.src is string && data.src.size() <= 1000000 &&
-             data.alt is string && data.alt.size() <= 10000 &&
-             (!('className' in data) || (data.className is string && data.className.size() <= 200)) &&
-             data.createdAt is timestamp;
-    }
-
+    // Fotogalleri: Alle kan sjå foto, berre admin kan redigere
     match /gallery/{photoId} {
       allow read: if true;
-      allow create: if isSignedIn() && isAdmin() &&
-                    isValidId(photoId) &&
-                    isValidGalleryPhoto(incoming());
-      allow update: if isSignedIn() && isAdmin() &&
-                    isValidId(photoId) &&
-                    isValidGalleryPhoto(incoming());
-      allow delete: if isSignedIn() && isAdmin() && isValidId(photoId);
+      allow write: if isAdmin();
     }
 
-    match /diary/{diaryId} {
-      allow read: if true;
-      
-      allow create: if isSignedIn() && isAdmin() &&
-                    isValidId(diaryId) &&
-                    isValidDiary(incoming());
-                    
-      allow update: if isSignedIn() && isAdmin() &&
-                    isValidId(diaryId) &&
-                    isValidDiary(incoming());
-                    
-      allow delete: if isSignedIn() && isAdmin() && isValidId(diaryId);
-    }
+    // Nettside-innstillingar («Om meg» bio osv.): Alle kan lese, berre admin kan endre
     match /settings/{settingId} {
       allow read: if true;
-      allow write: if isSignedIn() && isAdmin();
+      allow write: if isAdmin();
     }
 
+    // Besøks- og sidestatistikk: Må kunne oppdaterast automatisk av lesarar
     match /stats/{statId} {
-      allow read: if true;
-      // Allow any user to increment the counter
-      allow write: if true;
+      allow read, write: if true;
     }
     match /pageStats/{statId} {
-      allow read: if true;
-      allow write: if true;
+      allow read, write: if true;
     }
 
+    // Bestillingar av bøker: Kven som helst kan sende inn ei bestilling, 
+    // men KUN admin har lov til å sjå kundelister, adresser og ordrestatus!
     match /orders/{orderId} {
-      allow read, update, delete: if isAdmin();
       allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Kommentarar: Alle kan lese, innlogga kan skrive og slette eigne, admin kan moderere alt
+    match /comments/{commentId} {
+      allow read: if true;
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+    }
+
+    // Standard for alt anna som eventuelt ikkje er nemnt: stengt
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

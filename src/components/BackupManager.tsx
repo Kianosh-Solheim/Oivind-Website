@@ -3,6 +3,7 @@ import { db } from '../lib/firebase';
 import { 
   collection, 
   doc, 
+  getDoc,
   getDocs, 
   getDocsFromCache,
   getDocFromCache,
@@ -97,7 +98,11 @@ export default function BackupManager({ user, onDataChanged, currentCounts, load
     images: true,
     settings: true,
     comments: true,
+    orders: true,
   });
+
+  const [skipExisting, setSkipExisting] = useState(true);
+  const [failedDetails, setFailedDetails] = useState<{ type: string; id: string; error: string }[]>([]);
 
   const [showGuide, setShowGuide] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -363,7 +368,15 @@ export default function BackupManager({ user, onDataChanged, currentCounts, load
 
   // Perform Import
   const handleImport = async () => {
-    if (!importFile || !importFile.data || !user) return;
+    if (!user) {
+      setImportError('Du må vere innlogga som administrator for å importere data til databasen.');
+      return;
+    }
+
+    if (!importFile || !importFile.data) {
+      setImportError('Vel ei gyldig JSON-sikkerheitskopifil først.');
+      return;
+    }
 
     setImportError(null);
     setImportSuccess(null);
@@ -499,39 +512,82 @@ export default function BackupManager({ user, onDataChanged, currentCounts, load
       }
     }
 
+    // 8. Orders (Viss inkludert i tryggingskopien)
+    if (selectedCategories.orders && data.orders && Array.isArray(data.orders)) {
+      for (const item of data.orders) {
+        const id = item.id || doc(collection(db, 'orders')).id;
+        const cleaned: any = { ...item };
+        delete cleaned.id;
+        if (cleaned.createdAt) cleaned.createdAt = parseTimestamp(cleaned.createdAt);
+        tasks.push({ type: 'orders', id, docData: cleaned });
+      }
+    }
+
     if (tasks.length === 0) {
       setImportError('Ingen element vald for import.');
       return;
     }
 
     let successCount = 0;
+    let skippedCount = 0;
     let errorCount = 0;
+    const failures: { type: string; id: string; error: string }[] = [];
+    setFailedDetails([]);
 
     for (let i = 0; i < tasks.length; i++) {
       const task = tasks[i];
       setImportProgress({
-        message: `Skriv ${task.type} (${i + 1} av ${tasks.length})...`,
+        message: `${skipExisting ? 'Sjekkar/skriv' : 'Skriv'} ${task.type} (${i + 1} av ${tasks.length})...`,
         current: i + 1,
         total: tasks.length,
       });
 
+      const docRef = doc(db, task.type, task.id);
+
+      // Sjekk om dokumentet finst frå før dersom hopp over er aktivert
+      if (skipExisting) {
+        try {
+          const snap = await getDoc(docRef);
+          if (snap.exists()) {
+            skippedCount++;
+            continue;
+          }
+        } catch (checkErr) {
+          // Gå vidare til skriveforsøk dersom lesing feilar
+        }
+      }
+
       try {
-        await setDoc(doc(db, task.type, task.id), task.docData);
+        await setDoc(docRef, task.docData);
         successCount++;
       } catch (err: any) {
         console.error(`Feil ved import av ${task.type}/${task.id}:`, err);
+        const errMessage = err?.message || err?.code || String(err);
+        failures.push({ type: task.type, id: task.id, error: errMessage });
         errorCount++;
       }
     }
 
     setImportProgress(null);
+    setFailedDetails(failures);
     invalidateCache();
     onDataChanged();
 
     if (errorCount === 0) {
-      setImportSuccess(`Fullført! Importerte ${successCount} element til Firestore.`);
+      if (skippedCount > 0) {
+        setImportSuccess(`Fullført! Importerte ${successCount} nye element (${skippedCount} vart hoppa over fordi dei allereie finst i databasen).`);
+      } else {
+        setImportSuccess(`Fullført! Importerte ${successCount} element til Firestore.`);
+      }
     } else {
-      setImportSuccess(`Fullført med nokre åtvaringar: ${successCount} vart importert, men ${errorCount} feila.`);
+      const firstErr = failures[0]?.error || 'Ukjend feil';
+      if (successCount === 0 && skippedCount === 0) {
+        setImportError(`Ingen element vart importert (${errorCount} feila). Siste feilmelding frå Firebase: "${firstErr}".`);
+      } else {
+        setImportSuccess(
+          `Fullført: ${successCount} vart importerte, ${skippedCount} vart hoppa over (eksisterer allereie), og ${errorCount} feila. Siste feil: "${firstErr}"`
+        );
+      }
     }
   };
 
@@ -792,7 +848,39 @@ export default function BackupManager({ user, onDataChanged, currentCounts, load
                         <span>Om meg ({importFile.data.settings.length})</span>
                       </label>
                     )}
+                    {importFile.data.orders && (
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedCategories.orders}
+                          onChange={(e) => setSelectedCategories({ ...selectedCategories, orders: e.target.checked })}
+                          className="rounded text-brand-dark focus:ring-0"
+                        />
+                        <span>Ordrar ({importFile.data.orders.length})</span>
+                      </label>
+                    )}
                   </div>
+                </div>
+
+                {/* SKIP EXISTING OPTION */}
+                <div className="pt-3 border-t border-gray-200">
+                  <label className="flex items-start gap-2.5 cursor-pointer bg-white p-2.5 border border-gray-200/80 rounded-sm">
+                    <input
+                      type="checkbox"
+                      checked={skipExisting}
+                      onChange={(e) => setSkipExisting(e.target.checked)}
+                      className="mt-0.5 rounded text-brand-dark focus:ring-0 cursor-pointer"
+                      id="skip-existing-checkbox"
+                    />
+                    <div className="text-xs">
+                      <span className="font-semibold text-brand-dark block">
+                        Hopp over element som allereie finst i databasen (anbefalt)
+                      </span>
+                      <span className="text-[11px] text-brand-muted block mt-0.5 leading-normal">
+                        Sjekkar kvar artikkel, bok og foto før skriving. Dersom dokumentet allereie eksisterer, blir det hoppa over utan feil eller duplisering.
+                      </span>
+                    </div>
+                  </label>
                 </div>
               </div>
             )}
@@ -826,6 +914,23 @@ export default function BackupManager({ user, onDataChanged, currentCounts, load
               <div className="p-3 bg-red-50 border border-red-200 text-red-800 text-xs flex items-start gap-2">
                 <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
                 <span>{importError}</span>
+              </div>
+            )}
+
+            {/* FAILED DETAILS LIST */}
+            {failedDetails.length > 0 && (
+              <div className="p-3 bg-amber-50 border border-amber-200 text-amber-900 text-xs space-y-2">
+                <div className="font-semibold flex items-center justify-between">
+                  <span>Mislykka element ({failedDetails.length} stk):</span>
+                  <span className="text-[10px] text-amber-700">Sjekk reglar for desse samlingane</span>
+                </div>
+                <div className="max-h-32 overflow-y-auto space-y-1 font-mono text-[11px] bg-white/70 p-2 border border-amber-200/60 rounded">
+                  {failedDetails.map((f, idx) => (
+                    <div key={idx} className="truncate" title={`${f.type}/${f.id}: ${f.error}`}>
+                      <span className="font-bold text-brand-dark">{f.type}</span>/{f.id}: <span className="text-red-600">{f.error}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
