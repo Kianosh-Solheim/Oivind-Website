@@ -5,12 +5,14 @@ import { collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, query, or
 import { invalidateCache, getCachedDocs, subscribeToStats, stats } from '../lib/dbCache';
 import TextareaAutosize from 'react-textarea-autosize';
 import RichTextEditor from '../components/RichTextEditor';
-import { ArrowLeft, Plus, Info, Save } from 'lucide-react';
+import { ArrowLeft, Plus, Info, Save, Sparkles, ExternalLink, CreditCard } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import FileManager from '../components/FileManager';
 import ImagePickerModal from '../components/ImagePickerModal';
 import BackupManager from '../components/BackupManager';
+import BookPromoManager from '../components/BookPromoManager';
+import { getBuyLinkType } from '../lib/utils';
 
 interface Article {
   id?: string;
@@ -38,6 +40,17 @@ interface Book {
   descriptionEn?: string;
   buyLinkEn?: string;
   price?: number;
+  promoActive?: boolean;
+  promoSlug?: string;
+  promoHeadline?: string;
+  promoBadge?: string;
+  promoDescription?: string;
+  promoExcerpt?: string;
+  promoHighlights?: string[];
+  promoQuotes?: { quote: string; author?: string; source?: string }[];
+  promoDirectSale?: boolean;
+  promoSpecialPrice?: number;
+  promoShippingText?: string;
 }
 
 interface Order {
@@ -109,7 +122,8 @@ export default function Admin() {
   const [articleForm, setArticleForm] = useState({ title: '', content: '', published: true, language: 'no', slug: '', imageUrl: '', imageCaption: '', translationId: '' });
   const [infoDialog, setInfoDialog] = useState<{title: string, content: React.ReactNode} | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{title: string, message: string, onConfirm: () => void} | null>(null);
-  const [dashboardTab, setDashboardTab] = useState<'overview' | 'articles' | 'books' | 'diary' | 'files' | 'about' | 'photos' | 'orders' | 'backup'>('overview');
+  const [dashboardTab, setDashboardTab] = useState<'overview' | 'articles' | 'books' | 'promo' | 'diary' | 'files' | 'about' | 'photos' | 'orders' | 'backup'>('overview');
+  const [promoTargetBookId, setPromoTargetBookId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   
   const [bookForm, setBookForm] = useState<Book>({ title: '', description: '', publishedYear: new Date().getFullYear(), coverImageUrl: '', isbn: '', buyLink: '', pageCount: 0, language: 'no', titleEn: '', descriptionEn: '', buyLinkEn: '', price: 0 });
@@ -135,7 +149,7 @@ export default function Admin() {
     if (user) {
       const params = new URLSearchParams(location.search);
       const tabParam = params.get('tab');
-      if (tabParam === 'books' || tabParam === 'files' || tabParam === 'articles' || tabParam === 'diary' || tabParam === 'about' || tabParam === 'photos' || tabParam === 'orders' || tabParam === 'backup') {
+      if (tabParam === 'books' || tabParam === 'promo' || tabParam === 'files' || tabParam === 'articles' || tabParam === 'diary' || tabParam === 'about' || tabParam === 'photos' || tabParam === 'orders' || tabParam === 'backup') {
         setDashboardTab(tabParam as any);
       }
       
@@ -428,6 +442,8 @@ export default function Admin() {
         ...bookForm,
         publishedYear: Number(bookForm.publishedYear),
         price: Number(bookForm.price || 0),
+        buyLink: (bookForm.buyLink || '').trim(),
+        buyLinkEn: (bookForm.buyLinkEn || '').trim(),
         updatedAt: serverTimestamp()
       };
 
@@ -1099,6 +1115,13 @@ export default function Admin() {
               Bøker
             </button>
             <button 
+              onClick={() => setDashboardTab('promo')} 
+              className={`text-left px-4 py-3 text-xs tracking-widest uppercase font-semibold transition-colors shrink-0 flex items-center justify-between gap-1.5 ${dashboardTab === 'promo' ? 'bg-brand-dark text-white' : 'text-brand-muted hover:text-brand-dark hover:bg-gray-50'}`}
+            >
+              <span>Bokpromosjon</span>
+              <Sparkles className={`w-3.5 h-3.5 ${dashboardTab === 'promo' ? 'text-amber-300' : 'text-amber-500'}`} />
+            </button>
+            <button 
               onClick={() => setDashboardTab('diary')} 
               className={`text-left px-4 py-3 text-xs tracking-widest uppercase font-semibold transition-colors shrink-0 ${dashboardTab === 'diary' ? 'bg-brand-dark text-white' : 'text-brand-muted hover:text-brand-dark hover:bg-gray-50'}`}
             >
@@ -1392,10 +1415,60 @@ export default function Admin() {
                     placeholder="Skildring (Norsk)" required rows={3}
                     value={bookForm.description} onChange={e => setBookForm({...bookForm, description: e.target.value})}
                     className="w-full p-3 text-sm border border-gray-200 focus:border-brand-accent focus:ring-1 focus:ring-brand-accent bg-white outline-none transition-colors resize-y min-h-[80px]"></textarea>
-                  <input 
-                    type="url" placeholder="Kjøpslenkje (Norsk - valfritt)"
-                    value={bookForm.buyLink || ''} onChange={e => setBookForm({...bookForm, buyLink: e.target.value})}
-                    className="w-full p-3 text-sm border border-gray-200 focus:border-brand-accent focus:ring-1 focus:ring-brand-accent bg-white outline-none transition-colors" />
+                  
+                  {/* STRIPE PAYMENT LINK - SYNCHRONIZED WITH PROMO */}
+                  {/* STRIPE OR AMAZON PAYMENT / PURCHASE LINK */}
+                  <div className="p-3.5 bg-amber-50/70 border border-amber-200/80 rounded space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <CreditCard className="w-3.5 h-3.5 text-amber-800" />
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-brand-dark">
+                          Kjøpslenkje (Stripe eller Amazon)
+                        </span>
+                      </div>
+                      {bookForm.buyLink && (
+                        <a
+                          href={bookForm.buyLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] font-semibold text-brand-dark hover:text-brand-accent flex items-center gap-1"
+                        >
+                          Test lenkje <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+                    </div>
+                    <input 
+                      type="url" 
+                      placeholder="https://buy.stripe.com/... eller https://amazon.com/..."
+                      value={bookForm.buyLink || ''} 
+                      onChange={e => setBookForm({...bookForm, buyLink: e.target.value})}
+                      className="w-full p-2.5 text-xs font-mono border border-stone-300 focus:border-brand-dark bg-white outline-none" 
+                    />
+                    {(() => {
+                      const detected = getBuyLinkType(bookForm.buyLink);
+                      if (detected === 'amazon') {
+                        return (
+                          <div className="flex items-center gap-1 text-[11px] text-amber-900 bg-amber-100/90 border border-amber-300/80 px-2 py-1 rounded">
+                            <span className="font-bold">🛒 Amazon-lenkje oppdaga:</span>
+                            <span>Salgssida viser automatisk «Kjøp frå Amazon».</span>
+                          </div>
+                        );
+                      }
+                      if (detected === 'stripe') {
+                        return (
+                          <div className="flex items-center gap-1 text-[11px] text-emerald-900 bg-emerald-100/90 border border-emerald-300/80 px-2 py-1 rounded">
+                            <span className="font-bold">💳 Stripe-lenkje oppdaga:</span>
+                            <span>Salgssida viser automatisk «Trygg betaling med Stripe».</span>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+                    <div className="flex items-center gap-1.5 text-[10px] text-stone-600 bg-white/70 p-2 rounded border border-amber-200/50">
+                      <span className="font-semibold text-amber-800 shrink-0">⚡ 100% Synkronisert:</span>
+                      <span>Endrar du lenkja her, oppdaterast ho automatisk i Bokpromosjon (/salg/...) og motsett.</span>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -1410,10 +1483,38 @@ export default function Admin() {
                     placeholder="Description (English)" required rows={3}
                     value={bookForm.description} onChange={e => setBookForm({...bookForm, description: e.target.value})}
                     className="w-full p-3 text-sm border border-gray-200 focus:border-brand-accent focus:ring-1 focus:ring-brand-accent bg-white outline-none transition-colors resize-y min-h-[80px]"></textarea>
-                  <input 
-                    type="url" placeholder="Buy link (English - optional)"
-                    value={bookForm.buyLink || ''} onChange={e => setBookForm({...bookForm, buyLink: e.target.value})}
-                    className="w-full p-3 text-sm border border-gray-200 focus:border-brand-accent focus:ring-1 focus:ring-brand-accent bg-white outline-none transition-colors" />
+                  
+                  {/* STRIPE PAYMENT LINK (EN) */}
+                  <div className="p-3.5 bg-amber-50/70 border border-amber-200/80 rounded space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <CreditCard className="w-3.5 h-3.5 text-amber-800" />
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-brand-dark">
+                          Stripe payment link / Buy link (English)
+                        </span>
+                      </div>
+                      {bookForm.buyLink && (
+                        <a
+                          href={bookForm.buyLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] font-semibold text-brand-dark hover:text-brand-accent flex items-center gap-1"
+                        >
+                          Test link <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+                    </div>
+                    <input 
+                      type="url" 
+                      placeholder="https://buy.stripe.com/... or bookstore link"
+                      value={bookForm.buyLink || ''} 
+                      onChange={e => setBookForm({...bookForm, buyLink: e.target.value})}
+                      className="w-full p-2.5 text-xs font-mono border border-stone-300 focus:border-brand-dark bg-white outline-none" 
+                    />
+                    <div className="text-[10px] text-stone-600 bg-white/70 p-2 rounded border border-amber-200/50">
+                      Synchronized with book promotion landing pages.
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -1428,10 +1529,35 @@ export default function Admin() {
                     placeholder="Skildring (Engelsk)" required rows={3}
                     value={bookForm.descriptionEn || ''} onChange={e => setBookForm({...bookForm, descriptionEn: e.target.value})}
                     className="w-full p-3 text-sm border border-gray-200 focus:border-brand-accent focus:ring-1 focus:ring-brand-accent bg-white outline-none transition-colors resize-y min-h-[80px]"></textarea>
-                  <input 
-                    type="url" placeholder="Kjøpslenkje (Engelsk - valfritt)"
-                    value={bookForm.buyLinkEn || ''} onChange={e => setBookForm({...bookForm, buyLinkEn: e.target.value})}
-                    className="w-full p-3 text-sm border border-gray-200 focus:border-brand-accent focus:ring-1 focus:ring-brand-accent bg-white outline-none transition-colors" />
+                  
+                  {/* STRIPE PAYMENT LINK (EN) */}
+                  <div className="p-3.5 bg-amber-50/70 border border-amber-200/80 rounded space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <CreditCard className="w-3.5 h-3.5 text-amber-800" />
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-brand-dark">
+                          Kjøpslenkje / Stripe (Engelsk versjon)
+                        </span>
+                      </div>
+                      {bookForm.buyLinkEn && (
+                        <a
+                          href={bookForm.buyLinkEn}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] font-semibold text-brand-dark hover:text-brand-accent flex items-center gap-1"
+                        >
+                          Test lenkje <ExternalLink className="w-3 h-3" />
+                        </a>
+                      )}
+                    </div>
+                    <input 
+                      type="url" 
+                      placeholder="https://buy.stripe.com/... (valfritt for engelsk versjon)"
+                      value={bookForm.buyLinkEn || ''} 
+                      onChange={e => setBookForm({...bookForm, buyLinkEn: e.target.value})}
+                      className="w-full p-2.5 text-xs font-mono border border-stone-300 focus:border-brand-dark bg-white outline-none" 
+                    />
+                  </div>
                 </div>
               )}
 
@@ -1465,9 +1591,29 @@ export default function Admin() {
                 <div key={book.id} className="p-4 border border-gray-100 flex justify-between items-center bg-white shadow-sm group">
                   <div className="pr-4">
                     <h3 className="font-semibold text-sm">{book.title}</h3>
-                    <span className="text-[11px] text-gray-500">{book.publishedYear}</span>
+                    <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-500 mt-1">
+                      <span>{book.publishedYear}</span>
+                      {book.price ? <span>• kr {book.price},-</span> : null}
+                      {book.buyLink ? (
+                        <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded text-[10px] font-mono truncate max-w-[200px]" title={book.buyLink}>
+                          <CreditCard className="w-3 h-3 text-emerald-600 shrink-0" /> Stripe aktiv
+                        </span>
+                      ) : (
+                        <span className="text-stone-400 italic text-[10px]">Ingen Stripe-lenkje</span>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex gap-4 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex gap-4 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity items-center">
+                    <button 
+                      onClick={() => {
+                        setPromoTargetBookId(book.id || null);
+                        setDashboardTab('promo');
+                      }} 
+                      className="text-amber-600 hover:text-amber-700 text-[10px] font-semibold tracking-widest shrink-0 flex items-center gap-1"
+                      title="Opprett eller rediger salgsside for denne boka"
+                    >
+                      <Sparkles className="w-3 h-3" /> SALGSSIDE
+                    </button>
                     <button onClick={() => editBook(book)} className="text-brand-dark text-[10px] font-semibold tracking-widest shrink-0">REDIGER</button>
                     <button onClick={() => deleteBook(book.id!)} className="text-red-500 text-[10px] font-semibold tracking-widest shrink-0">SLETT</button>
                   </div>
@@ -1477,6 +1623,24 @@ export default function Admin() {
                 <div className="text-sm text-brand-muted p-4 border border-gray-100 text-center">Ingen bøker lagt til enno.</div>
               )}
             </div>
+            </div>
+          </section>
+          )}
+
+          {/* BOOK PROMOTIONS & SALES LANDING PAGES */}
+          {dashboardTab === 'promo' && (
+          <section className="lg:col-span-9 xl:col-span-10">
+            <div className="max-w-4xl pt-4 lg:pt-8 pr-4 md:pr-8">
+              <BookPromoManager 
+                books={books} 
+                onDataChanged={loadData}
+                targetBookId={promoTargetBookId}
+                onClearTargetBookId={() => setPromoTargetBookId(null)}
+                onEditInBooksTab={(bookToEdit) => {
+                  editBook(bookToEdit);
+                  setDashboardTab('books');
+                }}
+              />
             </div>
           </section>
           )}

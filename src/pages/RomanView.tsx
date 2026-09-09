@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, BookOpen, ShoppingBag, FileText, Hash } from 'lucide-react';
+import { ArrowLeft, BookOpen, ShoppingBag, FileText, Hash, ExternalLink } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { doc, getDoc, getDocFromCache } from 'firebase/firestore';
 import { motion } from 'motion/react';
 import { useLanguage } from '../context/LanguageContext';
+import { slugify } from '../lib/utils';
 
 export default function RomanView() {
   const { id } = useParams();
@@ -109,16 +110,23 @@ export default function RomanView() {
                 )}
               </div>
               
-              <div className="flex flex-wrap gap-4 items-center justify-end">
+              <div className="flex flex-wrap gap-3 items-center justify-end">
+                <Link 
+                  to={`/salg/${book.promoSlug || slugify(book.title)}`}
+                  className="inline-flex items-center justify-center bg-brand-dark hover:bg-black text-white px-6 py-3 text-xs font-semibold tracking-widest uppercase transition-colors shrink-0 shadow-sm"
+                >
+                  <ShoppingBag className="w-4 h-4 mr-2" />
+                  {language === 'en' ? 'Book Sale & Order' : 'Kjøp boka (Salgsside)'}
+                </Link>
                 {displayBuyLink && (
                   <a 
                     href={displayBuyLink} 
                     target="_blank" 
                     rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center bg-brand-dark hover:bg-black text-white px-6 py-3 text-xs font-semibold tracking-widest uppercase transition-colors shrink-0"
+                    className="inline-flex items-center justify-center border border-stone-300 hover:border-brand-dark text-brand-dark px-4 py-3 text-xs font-semibold tracking-widest uppercase transition-colors shrink-0"
                   >
-                    <ShoppingBag className="w-4 h-4 mr-2" />
-                    {language === 'en' ? 'Buy Book' : 'Kjøp boka'}
+                    <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+                    {language === 'en' ? 'Bookstore' : 'Bokhandlar'}
                   </a>
                 )}
               </div>

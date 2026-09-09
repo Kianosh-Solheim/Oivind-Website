@@ -11,6 +11,7 @@ import Admin from './pages/Admin';
 import Dagbok from './pages/Dagbok';
 import OmMeg from './pages/OmMeg';
 import Success from './pages/Success';
+import BokSalg from './pages/BokSalg';
 import { LanguageProvider } from './context/LanguageContext';
 import VisitorTracker from './components/VisitorTracker';
 import ScrollToTop from './components/ScrollToTop';
@@ -32,6 +33,8 @@ export default function App() {
               <Route path="/dagbok" element={<Dagbok />} />
               <Route path="/boker" element={<Romanar />} />
               <Route path="/boker/:id" element={<RomanView />} />
+              <Route path="/salg" element={<BokSalg />} />
+              <Route path="/salg/:slug" element={<BokSalg />} />
               <Route path="/om-meg" element={<OmMeg />} />
               <Route path="/admin" element={<Admin />} />
               <Route path="/success" element={<Success />} />
