@@ -4,6 +4,8 @@ import {
   collection, 
   doc, 
   getDocs, 
+  getDocsFromCache,
+  getDocFromCache,
   setDoc, 
   Timestamp 
 } from 'firebase/firestore';
@@ -64,9 +66,18 @@ interface BackupManagerProps {
     diaries: number;
     gallery: number;
   };
+  loadedData?: {
+    articles?: any[];
+    books?: any[];
+    diaries?: any[];
+    galleryPhotos?: any[];
+    orders?: any[];
+    aboutForm?: any;
+    pageStats?: any[];
+  };
 }
 
-export default function BackupManager({ user, onDataChanged, currentCounts }: BackupManagerProps) {
+export default function BackupManager({ user, onDataChanged, currentCounts, loadedData }: BackupManagerProps) {
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [exportSuccess, setExportSuccess] = useState<string | null>(null);
@@ -142,6 +153,78 @@ export default function BackupManager({ user, onDataChanged, currentCounts }: Ba
     return Timestamp.now();
   };
 
+  // Resilient collection fetcher that falls back to IndexedDB or in-memory props when server quota is exhausted
+  const fetchCollectionWithFallback = async (
+    collectionName: string, 
+    fallbackData: any[] = []
+  ): Promise<{ items: any[]; fromCache: boolean }> => {
+    // 1. Try server fetch first
+    try {
+      const snap = await getDocs(collection(db, collectionName));
+      const items = snap.docs.map(d => ({ id: d.id, ...serializeValue(d.data()) }));
+      if (items.length > 0) {
+        return { items, fromCache: false };
+      }
+    } catch (serverErr: any) {
+      console.warn(`Server fetch for ${collectionName} failed (quota limit or network):`, serverErr?.message);
+    }
+
+    // 2. Try IndexedDB persistent cache (no quota needed)
+    try {
+      const cacheSnap = await getDocsFromCache(collection(db, collectionName));
+      if (cacheSnap && cacheSnap.docs.length > 0) {
+        const items = cacheSnap.docs.map(d => ({ id: d.id, ...serializeValue(d.data()) }));
+        return { items, fromCache: true };
+      }
+    } catch (cacheErr: any) {
+      console.warn(`IndexedDB cache fetch for ${collectionName} failed:`, cacheErr?.message);
+    }
+
+    // 3. Fall back to already loaded memory data from props
+    if (fallbackData && fallbackData.length > 0) {
+      const items = fallbackData.map(item => ({ ...serializeValue(item) }));
+      return { items, fromCache: true };
+    }
+
+    return { items: [], fromCache: false };
+  };
+
+  const fetchSettingsWithFallback = async (fallbackSettings?: any): Promise<{ items: any[]; fromCache: boolean }> => {
+    try {
+      const snap = await getDocs(collection(db, 'settings'));
+      const items = snap.docs.map(d => ({ id: d.id, ...serializeValue(d.data()) }));
+      if (items.length > 0) {
+        return { items, fromCache: false };
+      }
+    } catch (serverErr) {
+      console.warn('Server fetch for settings failed:', serverErr);
+    }
+
+    try {
+      const cacheSnap = await getDocsFromCache(collection(db, 'settings'));
+      if (cacheSnap && cacheSnap.docs.length > 0) {
+        const items = cacheSnap.docs.map(d => ({ id: d.id, ...serializeValue(d.data()) }));
+        return { items, fromCache: true };
+      }
+    } catch (cacheErr) {
+      console.warn('Cache fetch for settings failed:', cacheErr);
+    }
+
+    // Try single doc 'about'
+    try {
+      const docSnap = await getDocFromCache(doc(db, 'settings', 'about'));
+      if (docSnap.exists()) {
+        return { items: [{ id: 'about', ...serializeValue(docSnap.data()) }], fromCache: true };
+      }
+    } catch (e) {}
+
+    if (fallbackSettings && (fallbackSettings.bioNo || fallbackSettings.bioEn || fallbackSettings.title)) {
+      return { items: [{ id: 'about', ...serializeValue(fallbackSettings) }], fromCache: true };
+    }
+
+    return { items: [], fromCache: false };
+  };
+
   // Handle Export
   const handleExport = async () => {
     setIsExporting(true);
@@ -149,37 +232,53 @@ export default function BackupManager({ user, onDataChanged, currentCounts }: Ba
     setExportSuccess(null);
 
     try {
+      let anyFromCache = false;
+
       // 1. Articles
-      const articlesSnap = await getDocs(collection(db, 'articles'));
-      const articles = articlesSnap.docs.map(d => ({ id: d.id, ...serializeValue(d.data()) }));
+      const articlesRes = await fetchCollectionWithFallback('articles', loadedData?.articles);
+      if (articlesRes.fromCache) anyFromCache = true;
+      const articles = articlesRes.items;
 
       // 2. Books
-      const booksSnap = await getDocs(collection(db, 'books'));
-      const books = booksSnap.docs.map(d => ({ id: d.id, ...serializeValue(d.data()) }));
+      const booksRes = await fetchCollectionWithFallback('books', loadedData?.books);
+      if (booksRes.fromCache) anyFromCache = true;
+      const books = booksRes.items;
 
       // 3. Diary
-      const diarySnap = await getDocs(collection(db, 'diary'));
-      const diary = diarySnap.docs.map(d => ({ id: d.id, ...serializeValue(d.data()) }));
+      const diaryRes = await fetchCollectionWithFallback('diary', loadedData?.diaries);
+      if (diaryRes.fromCache) anyFromCache = true;
+      const diary = diaryRes.items;
 
       // 4. Gallery
-      const gallerySnap = await getDocs(collection(db, 'gallery'));
-      const gallery = gallerySnap.docs.map(d => ({ id: d.id, ...serializeValue(d.data()) }));
+      const galleryRes = await fetchCollectionWithFallback('gallery', loadedData?.galleryPhotos);
+      if (galleryRes.fromCache) anyFromCache = true;
+      const gallery = galleryRes.items;
 
       // 5. Images
-      const imagesSnap = await getDocs(collection(db, 'images'));
-      const images = imagesSnap.docs.map(d => ({ id: d.id, ...serializeValue(d.data()) }));
+      const imagesRes = await fetchCollectionWithFallback('images');
+      if (imagesRes.fromCache) anyFromCache = true;
+      const images = imagesRes.items;
 
       // 6. Settings
-      const settingsSnap = await getDocs(collection(db, 'settings'));
-      const settings = settingsSnap.docs.map(d => ({ id: d.id, ...serializeValue(d.data()) }));
+      const settingsRes = await fetchSettingsWithFallback(loadedData?.aboutForm);
+      if (settingsRes.fromCache) anyFromCache = true;
+      const settings = settingsRes.items;
 
       // 7. Comments
-      const commentsSnap = await getDocs(collection(db, 'comments'));
-      const comments = commentsSnap.docs.map(d => ({ id: d.id, ...serializeValue(d.data()) }));
+      const commentsRes = await fetchCollectionWithFallback('comments');
+      if (commentsRes.fromCache) anyFromCache = true;
+      const comments = commentsRes.items;
 
       // 8. Orders
-      const ordersSnap = await getDocs(collection(db, 'orders'));
-      const orders = ordersSnap.docs.map(d => ({ id: d.id, ...serializeValue(d.data()) }));
+      const ordersRes = await fetchCollectionWithFallback('orders', loadedData?.orders);
+      if (ordersRes.fromCache) anyFromCache = true;
+      const orders = ordersRes.items;
+
+      const totalItems = articles.length + books.length + diary.length + gallery.length + images.length + settings.length + comments.length + orders.length;
+
+      if (totalItems === 0) {
+        throw new Error('Fann ingen element i databasen eller i lokal hurtigbuffer. Viss Firebase-kvoten for dagen er oppbrukt på dette prosjektet, kan du gjere eit forsøk etter at sida har vore opna slik at cachen vert fylt.');
+      }
 
       const backup: BackupFile = {
         version: 1,
@@ -219,8 +318,11 @@ export default function BackupManager({ user, onDataChanged, currentCounts }: Ba
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      const totalItems = articles.length + books.length + diary.length + gallery.length + images.length + settings.length;
-      setExportSuccess(`Sikkerheitskopien vart lasta ned! Totalt ${totalItems} element (artiklar, bøker, dagbok, galleri og innstillingar).`);
+      if (anyFromCache) {
+        setExportSuccess(`Sikkerheitskopien vart lasta ned! Totalt ${totalItems} element (artiklar: ${articles.length}, bøker: ${books.length}, dagbok: ${diary.length}, galleri: ${gallery.length}). Data vart trygt henta frå lokal hurtigbuffer/minne fordi Firebase-serverkvoten er oppbrukt for dagen på dette prosjektet.`);
+      } else {
+        setExportSuccess(`Sikkerheitskopien vart lasta ned! Totalt ${totalItems} element (artiklar: ${articles.length}, bøker: ${books.length}, dagbok: ${diary.length}, galleri: ${gallery.length}).`);
+      }
     } catch (err: any) {
       console.error('Feil ved eksport:', err);
       if (err?.message?.includes('Quota') || err?.code === 'resource-exhausted') {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, getDocFromCache } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useLanguage } from '../context/LanguageContext';
 import ReactMarkdown from 'react-markdown';
@@ -12,15 +12,28 @@ export default function OmMeg() {
 
   useEffect(() => {
     window.scrollTo(0, 0);
-    getDoc(doc(db, 'settings', 'about')).then(snap => {
-      if (snap.exists()) {
-        setAboutData(snap.data());
+    const fetchAbout = async () => {
+      const docRef = doc(db, 'settings', 'about');
+      try {
+        const snap = await getDoc(docRef);
+        if (snap.exists()) {
+          setAboutData(snap.data());
+        }
+      } catch (e) {
+        console.warn('Server fetch for about failed, trying cache:', e);
+        try {
+          const cachedSnap = await getDocFromCache(docRef);
+          if (cachedSnap.exists()) {
+            setAboutData(cachedSnap.data());
+          }
+        } catch (cErr) {
+          console.warn('Cache fetch for about failed:', cErr);
+        }
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
-    }).catch((e) => {
-      console.error(e);
-      setLoading(false);
-    });
+    };
+    fetchAbout();
   }, []);
 
   if (loading) {

@@ -16,19 +16,10 @@ export default function VisitorTracker() {
       
       try {
         const statsRef = doc(db, 'stats', 'visitors');
-        const statsDoc = await getDoc(statsRef);
-        
-        if (!statsDoc.exists()) {
-          await setDoc(statsRef, {
-            count: 1,
-            lastVisit: serverTimestamp()
-          });
-        } else {
-          await setDoc(statsRef, {
-            count: increment(1),
-            lastVisit: serverTimestamp()
-          }, { merge: true });
-        }
+        await setDoc(statsRef, {
+          count: increment(1),
+          lastVisit: serverTimestamp()
+        }, { merge: true });
       } catch (error) {
         console.error('Failed to track visit:', error);
       }

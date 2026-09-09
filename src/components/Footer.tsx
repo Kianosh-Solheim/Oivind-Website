@@ -1,6 +1,6 @@
 import { ArrowRight } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, getDocFromCache } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useLanguage } from '../context/LanguageContext';
 import { Link } from 'react-router-dom';
@@ -10,9 +10,19 @@ export default function Footer() {
   const [aboutData, setAboutData] = useState<{ shortBioNo?: string; shortBioEn?: string; imageUrl?: string }>({});
 
   useEffect(() => {
-    getDoc(doc(db, 'settings', 'about')).then(snap => {
+    const docRef = doc(db, 'settings', 'about');
+    getDoc(docRef).then(snap => {
       if (snap.exists()) {
         setAboutData(snap.data());
+      }
+    }).catch(async () => {
+      try {
+        const cachedSnap = await getDocFromCache(docRef);
+        if (cachedSnap.exists()) {
+          setAboutData(cachedSnap.data());
+        }
+      } catch (e) {
+        // quiet fallback
       }
     });
   }, []);

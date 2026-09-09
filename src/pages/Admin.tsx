@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../lib/AuthContext';
 import { db } from '../lib/firebase';
-import { collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, query, orderBy, updateDoc, getDoc } from 'firebase/firestore';
+import { collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, query, orderBy, updateDoc, getDoc, getDocFromCache } from 'firebase/firestore';
 import { invalidateCache, getCachedDocs, subscribeToStats, stats } from '../lib/dbCache';
 import TextareaAutosize from 'react-textarea-autosize';
 import RichTextEditor from '../components/RichTextEditor';
@@ -127,7 +127,7 @@ export default function Admin() {
 
   useEffect(() => {
     if (user) {
-      invalidateCache(); loadData();
+      loadData();
     }
   }, [user]);
 
@@ -192,33 +192,75 @@ export default function Admin() {
 
   const loadData = async () => {
     try {
-      const articlesSnap = await getCachedDocs(query(collection(db, 'articles'), orderBy('createdAt', 'desc')), "articles_all");
-      setArticles(articlesSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Article)));
-
-      const booksSnap = await getCachedDocs(query(collection(db, 'books'), orderBy('createdAt', 'desc')), "books_all");
-      setBooks(booksSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Book)));
-
-      const diariesSnap = await getCachedDocs(query(collection(db, 'diary'), orderBy('createdAt', 'desc')), "diary_all");
-      setDiaries(diariesSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as DiaryEntry)));
-      
-      const gallerySnap = await getCachedDocs(query(collection(db, 'gallery'), orderBy('createdAt', 'desc')), "gallery_all");
-      setGalleryPhotos(gallerySnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as GalleryPhoto)));
-      
-      const ordersSnap = await getCachedDocs(query(collection(db, 'orders'), orderBy('createdAt', 'desc')), "orders_all");
-      setOrders(ordersSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Order)));
-      
-      const aboutDoc = await getDoc(doc(db, 'settings', 'about'));
-      if (aboutDoc.exists()) {
-        setAboutForm(aboutDoc.data() as AboutSettings);
+      try {
+        const articlesSnap = await getCachedDocs(query(collection(db, 'articles'), orderBy('createdAt', 'desc')), "articles_all");
+        setArticles(articlesSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Article)));
+      } catch (e) {
+        console.warn("Could not load articles:", e);
       }
 
-      const statsDoc = await getDoc(doc(db, 'stats', 'visitors'));
-      if (statsDoc.exists()) {
-        setVisitors(statsDoc.data().count || 0);
+      try {
+        const booksSnap = await getCachedDocs(query(collection(db, 'books'), orderBy('createdAt', 'desc')), "books_all");
+        setBooks(booksSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Book)));
+      } catch (e) {
+        console.warn("Could not load books:", e);
       }
 
-      const pageStatsSnap = await getCachedDocs(query(collection(db, 'pageStats')), "pageStats_all");
-      setPageStats(pageStatsSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })));
+      try {
+        const diariesSnap = await getCachedDocs(query(collection(db, 'diary'), orderBy('createdAt', 'desc')), "diary_all");
+        setDiaries(diariesSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as DiaryEntry)));
+      } catch (e) {
+        console.warn("Could not load diaries:", e);
+      }
+      
+      try {
+        const gallerySnap = await getCachedDocs(query(collection(db, 'gallery'), orderBy('createdAt', 'desc')), "gallery_all");
+        setGalleryPhotos(gallerySnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as GalleryPhoto)));
+      } catch (e) {
+        console.warn("Could not load gallery:", e);
+      }
+      
+      try {
+        const ordersSnap = await getCachedDocs(query(collection(db, 'orders'), orderBy('createdAt', 'desc')), "orders_all");
+        setOrders(ordersSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Order)));
+      } catch (e) {
+        console.warn("Could not load orders:", e);
+      }
+      
+      try {
+        let aboutDoc: any = null;
+        try {
+          aboutDoc = await getDoc(doc(db, 'settings', 'about'));
+        } catch (err) {
+          aboutDoc = await getDocFromCache(doc(db, 'settings', 'about'));
+        }
+        if (aboutDoc && aboutDoc.exists()) {
+          setAboutForm(aboutDoc.data() as AboutSettings);
+        }
+      } catch (e) {
+        console.warn("Could not load about settings:", e);
+      }
+
+      try {
+        let statsDoc: any = null;
+        try {
+          statsDoc = await getDoc(doc(db, 'stats', 'visitors'));
+        } catch (err) {
+          statsDoc = await getDocFromCache(doc(db, 'stats', 'visitors'));
+        }
+        if (statsDoc && statsDoc.exists()) {
+          setVisitors(statsDoc.data().count || 0);
+        }
+      } catch (e) {
+        console.warn("Could not load stats:", e);
+      }
+
+      try {
+        const pageStatsSnap = await getCachedDocs(query(collection(db, 'pageStats')), "pageStats_all");
+        setPageStats(pageStatsSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })));
+      } catch (e) {
+        console.warn("Could not load pageStats:", e);
+      }
     } catch (e) {
       console.error("Failed to load data", e);
     }
@@ -1826,6 +1868,15 @@ export default function Admin() {
                 books: books.length,
                 diaries: diaries.length,
                 gallery: galleryPhotos.length
+              }}
+              loadedData={{
+                articles,
+                books,
+                diaries,
+                galleryPhotos,
+                orders,
+                aboutForm,
+                pageStats,
               }}
             />
           )}

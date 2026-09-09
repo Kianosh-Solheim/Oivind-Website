@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, BookOpen, ShoppingBag, FileText, Hash } from 'lucide-react';
 import { db } from '../lib/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, getDocFromCache } from 'firebase/firestore';
 import { motion } from 'motion/react';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -17,8 +17,13 @@ export default function RomanView() {
       if (!id) return;
       try {
         const docRef = doc(db, 'books', id);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
+        let docSnap: any = null;
+        try {
+          docSnap = await getDoc(docRef);
+        } catch (sErr) {
+          docSnap = await getDocFromCache(docRef);
+        }
+        if (docSnap && docSnap.exists()) {
           setBook({ id: docSnap.id, ...docSnap.data() });
         }
       } catch (error) {
