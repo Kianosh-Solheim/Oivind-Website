@@ -36,15 +36,11 @@ service cloud.firestore {
       
       allow create: if isSignedIn() && isAdmin() &&
                     isValidId(articleId) &&
-                    isValidArticle(incoming()) &&
-                    incoming().createdAt == request.time &&
-                    incoming().updatedAt == request.time;
+                    isValidArticle(incoming());
                     
       allow update: if isSignedIn() && isAdmin() &&
                     isValidId(articleId) &&
-                    isValidArticle(incoming()) &&
-                    incoming().createdAt == existing().createdAt &&
-                    incoming().updatedAt == request.time;
+                    isValidArticle(incoming());
                     
       allow delete: if isSignedIn() && isAdmin() && isValidId(articleId);
     }
@@ -64,16 +60,12 @@ service cloud.firestore {
       
       allow create: if isSignedIn() && isAdmin() &&
                     isValidId(bookId) &&
-                    isValidBook(incoming()) &&
-                    incoming().createdAt == request.time &&
-                    incoming().updatedAt == request.time;
+                    isValidBook(incoming());
                     
       allow update: if isSignedIn() && isAdmin() &&
                     isValidId(bookId) &&
                     isValidBook(incoming()) &&
-                    (!('authorId' in existing()) || incoming().authorId == existing().authorId) &&
-                    incoming().createdAt == existing().createdAt &&
-                    incoming().updatedAt == request.time;
+                    (!('authorId' in existing()) || incoming().authorId == existing().authorId);
                     
       allow delete: if isSignedIn() && isAdmin() && isValidId(bookId);
     }
@@ -91,8 +83,7 @@ service cloud.firestore {
       
       allow create: if isSignedIn() && isAdmin() &&
                     isValidId(imageId) &&
-                    isValidImageAsset(incoming()) &&
-                    incoming().createdAt == request.time;
+                    isValidImageAsset(incoming());
                     
       allow delete: if isSignedIn() && isAdmin() && isValidId(imageId);
     }
@@ -111,9 +102,8 @@ service cloud.firestore {
     match /comments/{commentId} {
       allow read: if true;
       allow create: if isSignedIn() &&
-                    isValidComment(incoming()) &&
-                    incoming().createdAt == request.time;
-      allow update: if isSignedIn() && incoming().userId == request.auth.uid && isValidComment(incoming());
+                    ((isValidComment(incoming()) && incoming().createdAt == request.time) || isAdmin());
+      allow update: if isSignedIn() && (incoming().userId == request.auth.uid && isValidComment(incoming()) || isAdmin());
       allow delete: if isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
     }
 
@@ -144,12 +134,10 @@ service cloud.firestore {
       allow read: if true;
       allow create: if isSignedIn() && isAdmin() &&
                     isValidId(photoId) &&
-                    isValidGalleryPhoto(incoming()) &&
-                    incoming().createdAt == request.time;
+                    isValidGalleryPhoto(incoming());
       allow update: if isSignedIn() && isAdmin() &&
                     isValidId(photoId) &&
-                    isValidGalleryPhoto(incoming()) &&
-                    incoming().createdAt == existing().createdAt;
+                    isValidGalleryPhoto(incoming());
       allow delete: if isSignedIn() && isAdmin() && isValidId(photoId);
     }
 
@@ -158,15 +146,11 @@ service cloud.firestore {
       
       allow create: if isSignedIn() && isAdmin() &&
                     isValidId(diaryId) &&
-                    isValidDiary(incoming()) &&
-                    incoming().createdAt == request.time &&
-                    incoming().updatedAt == request.time;
+                    isValidDiary(incoming());
                     
       allow update: if isSignedIn() && isAdmin() &&
                     isValidId(diaryId) &&
-                    isValidDiary(incoming()) &&
-                    incoming().createdAt == existing().createdAt &&
-                    incoming().updatedAt == request.time;
+                    isValidDiary(incoming());
                     
       allow delete: if isSignedIn() && isAdmin() && isValidId(diaryId);
     }

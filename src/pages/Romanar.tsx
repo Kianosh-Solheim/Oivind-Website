@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { ArrowLeft, BookOpen, ShoppingBag, FileText, Hash, Plus } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { db } from '../lib/firebase';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { collection, query, orderBy } from 'firebase/firestore';
+import { getCachedDocs } from '../lib/dbCache';
 import { useAuth } from '../lib/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { motion, AnimatePresence } from 'motion/react';
@@ -33,7 +34,7 @@ export default function Romanar() {
     const fetchBooks = async () => {
       try {
         const q = query(collection(db, 'books'), orderBy('publishedYear', 'desc'));
-        const snap = await getDocs(q);
+        const snap = await getCachedDocs(q, "books_all");
         setBooks(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Book)));
       } catch (error) {
         console.error("Error fetching books", error);

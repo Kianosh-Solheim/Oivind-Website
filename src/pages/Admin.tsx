@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../lib/AuthContext';
 import { db } from '../lib/firebase';
 import { collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, query, orderBy, updateDoc, getDoc } from 'firebase/firestore';
+import { invalidateCache, getCachedDocs, subscribeToStats, stats } from '../lib/dbCache';
 import TextareaAutosize from 'react-textarea-autosize';
 import RichTextEditor from '../components/RichTextEditor';
 import { ArrowLeft, Plus, Info, Save } from 'lucide-react';
@@ -9,6 +10,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 
 import FileManager from '../components/FileManager';
 import ImagePickerModal from '../components/ImagePickerModal';
+import BackupManager from '../components/BackupManager';
 
 interface Article {
   id?: string;
@@ -107,17 +109,25 @@ export default function Admin() {
   const [articleForm, setArticleForm] = useState({ title: '', content: '', published: true, language: 'no', slug: '', imageUrl: '', imageCaption: '', translationId: '' });
   const [infoDialog, setInfoDialog] = useState<{title: string, content: React.ReactNode} | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{title: string, message: string, onConfirm: () => void} | null>(null);
-  const [dashboardTab, setDashboardTab] = useState<'overview' | 'articles' | 'books' | 'diary' | 'files' | 'about' | 'photos' | 'orders'>('overview');
+  const [dashboardTab, setDashboardTab] = useState<'overview' | 'articles' | 'books' | 'diary' | 'files' | 'about' | 'photos' | 'orders' | 'backup'>('overview');
   const [isSaving, setIsSaving] = useState(false);
   
   const [bookForm, setBookForm] = useState<Book>({ title: '', description: '', publishedYear: new Date().getFullYear(), coverImageUrl: '', isbn: '', buyLink: '', pageCount: 0, language: 'no', titleEn: '', descriptionEn: '', buyLinkEn: '', price: 0 });
 
   const [diaryForm, setDiaryForm] = useState<DiaryEntry>({ title: '', content: '', published: true, language: 'both', slug: '', imageUrl: '', imageCaption: '' });
   const [aboutForm, setAboutForm] = useState<AboutSettings>({ bioNo: '', bioEn: '', shortBioNo: '', shortBioEn: '', imageUrl: '' });
+  const [currentStats, setCurrentStats] = useState(stats);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToStats(() => {
+      setCurrentStats({ ...stats });
+    });
+    return unsubscribe;
+  }, []);
 
   useEffect(() => {
     if (user) {
-      loadData();
+      invalidateCache(); loadData();
     }
   }, [user]);
 
@@ -125,7 +135,7 @@ export default function Admin() {
     if (user) {
       const params = new URLSearchParams(location.search);
       const tabParam = params.get('tab');
-      if (tabParam === 'books' || tabParam === 'files' || tabParam === 'articles' || tabParam === 'diary' || tabParam === 'about' || tabParam === 'photos' || tabParam === 'orders') {
+      if (tabParam === 'books' || tabParam === 'files' || tabParam === 'articles' || tabParam === 'diary' || tabParam === 'about' || tabParam === 'photos' || tabParam === 'orders' || tabParam === 'backup') {
         setDashboardTab(tabParam as any);
       }
       
@@ -182,19 +192,19 @@ export default function Admin() {
 
   const loadData = async () => {
     try {
-      const articlesSnap = await getDocs(query(collection(db, 'articles'), orderBy('createdAt', 'desc')));
+      const articlesSnap = await getCachedDocs(query(collection(db, 'articles'), orderBy('createdAt', 'desc')), "articles_all");
       setArticles(articlesSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Article)));
 
-      const booksSnap = await getDocs(query(collection(db, 'books'), orderBy('createdAt', 'desc')));
+      const booksSnap = await getCachedDocs(query(collection(db, 'books'), orderBy('createdAt', 'desc')), "books_all");
       setBooks(booksSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Book)));
 
-      const diariesSnap = await getDocs(query(collection(db, 'diary'), orderBy('createdAt', 'desc')));
+      const diariesSnap = await getCachedDocs(query(collection(db, 'diary'), orderBy('createdAt', 'desc')), "diary_all");
       setDiaries(diariesSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as DiaryEntry)));
       
-      const gallerySnap = await getDocs(query(collection(db, 'gallery'), orderBy('createdAt', 'desc')));
+      const gallerySnap = await getCachedDocs(query(collection(db, 'gallery'), orderBy('createdAt', 'desc')), "gallery_all");
       setGalleryPhotos(gallerySnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as GalleryPhoto)));
       
-      const ordersSnap = await getDocs(query(collection(db, 'orders'), orderBy('createdAt', 'desc')));
+      const ordersSnap = await getCachedDocs(query(collection(db, 'orders'), orderBy('createdAt', 'desc')), "orders_all");
       setOrders(ordersSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as Order)));
       
       const aboutDoc = await getDoc(doc(db, 'settings', 'about'));
@@ -207,7 +217,7 @@ export default function Admin() {
         setVisitors(statsDoc.data().count || 0);
       }
 
-      const pageStatsSnap = await getDocs(collection(db, 'pageStats'));
+      const pageStatsSnap = await getCachedDocs(query(collection(db, 'pageStats')), "pageStats_all");
       setPageStats(pageStatsSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() })));
     } catch (e) {
       console.error("Failed to load data", e);
@@ -265,7 +275,7 @@ export default function Admin() {
           content: <p>Bildet er lagt til i Foto & Natur-galleriet.</p>
         });
       }
-      loadData();
+      invalidateCache(); loadData();
     } catch (err) {
       console.error("Klarte ikkje å lagre bilde", err);
     } finally {
@@ -282,7 +292,7 @@ export default function Admin() {
         try {
           await deleteDoc(doc(db, 'gallery', id));
           setConfirmDialog(null);
-          loadData();
+          invalidateCache(); loadData();
         } catch (err) {
           console.error("Klarte ikkje å slette bilde", err);
         }
@@ -336,7 +346,7 @@ export default function Admin() {
       setOriginalArticle(null);
       setIsComposing(false);
       navigate('/admin');
-      loadData();
+      invalidateCache(); loadData();
     } catch (e) {
       console.error("Feil ved lagring av artikkel. Er du sikker på at du er administrator? Error:", e);
     } finally {
@@ -390,7 +400,7 @@ export default function Admin() {
       }
       setBookForm({ title: '', description: '', publishedYear: new Date().getFullYear(), coverImageUrl: '', isbn: '', buyLink: '', pageCount: 0, language: 'no', titleEn: '', descriptionEn: '', buyLinkEn: '', price: 0 });
       setEditingBookId(null);
-      loadData();
+      invalidateCache(); loadData();
     } catch (e) {
       console.error("Feil ved lagring av bok. Er du sikker på at du er administrator? Error:", e);
     } finally {
@@ -432,7 +442,7 @@ export default function Admin() {
       onConfirm: async () => {
         try {
           await deleteDoc(doc(db, 'articles', id));
-          loadData();
+          invalidateCache(); loadData();
         } catch (e) {
           console.error(e);
         }
@@ -448,7 +458,7 @@ export default function Admin() {
       onConfirm: async () => {
         try {
           await deleteDoc(doc(db, 'books', id));
-          loadData();
+          invalidateCache(); loadData();
         } catch (e) {
           console.error(e);
         }
@@ -497,7 +507,7 @@ export default function Admin() {
       setOriginalDiary(null);
       setIsComposingDiary(false);
       navigate('/admin?tab=diary');
-      loadData();
+      invalidateCache(); loadData();
     } catch (e) {
       console.error("Feil ved lagring av dagbok. Er du sikker på at du er administrator? Error:", e);
     } finally {
@@ -529,7 +539,7 @@ export default function Admin() {
       onConfirm: async () => {
         try {
           await deleteDoc(doc(db, 'diary', id));
-          loadData();
+          invalidateCache(); loadData();
         } catch (e) {
           console.error("Feil ved sletting av oppslag. Mangler rettigheter. Error:", e);
         }
@@ -1076,9 +1086,32 @@ export default function Admin() {
             >
               Bestillingar
             </button>
+            <button 
+              onClick={() => setDashboardTab('backup')} 
+              className={`text-left px-4 py-3 text-xs tracking-widest uppercase font-semibold transition-colors shrink-0 ${dashboardTab === 'backup' ? 'bg-brand-dark text-white' : 'text-brand-muted hover:text-brand-dark hover:bg-gray-50'}`}
+            >
+              Sikkerheitskopi
+            </button>
           </nav>
+          
+          <div className="mt-8 p-4 border border-brand-sand bg-gray-50 flex flex-col gap-3">
+            <h4 className="text-[10px] font-semibold uppercase tracking-widest text-brand-muted">Kvote-tracker (minne)</h4>
+            
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-brand-dark">Henta frå server:</span>
+              <span className="text-xs font-mono font-bold text-red-600">{currentStats.serverReads}</span>
+            </div>
+            
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-brand-dark">Spart (Lokalt minne):</span>
+              <span className="text-xs font-mono font-bold text-green-600">{currentStats.cacheHits}</span>
+            </div>
+            
+            <p className="text-[9px] text-brand-muted leading-tight mt-2">
+              Viser estimert tal på dokument-lesingar i denne økta (sidan du opna fana).
+            </p>
+          </div>
         </aside>
-
         {/* MAIN CONTENT AREA */}
         <main className="lg:col-span-9 xl:col-span-10">
           {dashboardTab === 'overview' && (
@@ -1133,6 +1166,22 @@ export default function Admin() {
                     </tbody>
                   </table>
                 </div>
+              </div>
+
+              {/* SIKKERHEITSKOPI BANNER */}
+              <div className="mt-8 bg-brand-sand/15 border border-brand-sand/50 p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div>
+                  <h3 className="font-serif text-lg text-brand-dark">Sikkerheitskopi & Prosjekt-bytte</h3>
+                  <p className="text-xs text-brand-muted mt-1 max-w-xl">
+                    Ta vare på innhaldet ditt eller overfør alt til eit nytt Firebase-prosjekt. Last ned komplett JSON-sikkerheitskopi eller gjenopprett data med eitt klikk.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setDashboardTab('backup')}
+                  className="px-5 py-2.5 bg-brand-dark text-white text-xs font-semibold tracking-widest uppercase hover:bg-brand-dark/90 transition-colors shrink-0"
+                >
+                  Gå til Sikkerheitskopi
+                </button>
               </div>
             </section>
           )}
@@ -1765,6 +1814,20 @@ export default function Admin() {
                 </a>
               </div>
             </section>
+          )}
+
+          {/* BACKUP & MIGRATION */}
+          {dashboardTab === 'backup' && (
+            <BackupManager 
+              user={user}
+              onDataChanged={loadData}
+              currentCounts={{
+                articles: articles.length,
+                books: books.length,
+                diaries: diaries.length,
+                gallery: galleryPhotos.length
+              }}
+            />
           )}
 
           {showBookImagePicker && (

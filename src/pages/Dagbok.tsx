@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { collection, query, orderBy } from 'firebase/firestore';
+import { getCachedDocs } from '../lib/dbCache';
 import { useLanguage } from '../context/LanguageContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { Link } from 'react-router-dom';
@@ -27,7 +28,7 @@ export default function Dagbok() {
     const fetchDiary = async () => {
       try {
         const q = query(collection(db, 'diary'), orderBy('createdAt', 'desc'));
-        const snap = await getDocs(q);
+        const snap = await getCachedDocs(q, "diary_all");
         const fetched = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as DiaryEntry));
         
         const filtered = fetched.filter(a => {

@@ -2,6 +2,7 @@ import { ArrowLeft, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { collection, getDocs, orderBy, query } from 'firebase/firestore';
+import { getCachedDocs } from '../lib/dbCache';
 import { db } from '../lib/firebase';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -21,7 +22,7 @@ export default function Foto() {
     async function loadGallery() {
       try {
         const q = query(collection(db, 'gallery'), orderBy('createdAt', 'desc'));
-        const snap = await getDocs(q);
+        const snap = await getCachedDocs(q, "gallery_all");
         setDbImages(snap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as GalleryPhoto)));
       } catch (err) {
         console.error("Feil ved henting av galleribilde:", err);

@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { ArrowLeft, ArrowRight, Plus, Edit } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { db } from '../lib/firebase';
-import { collection, getDocs, query, orderBy, where } from 'firebase/firestore';
+import { collection, query, orderBy, where } from 'firebase/firestore';
+import { getCachedDocs } from '../lib/dbCache';
 import { stripHtml, calculateReadingTime } from '../lib/utils';
 import { useAuth } from '../lib/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -31,7 +32,7 @@ export default function Refleksjoner() {
     const fetchArticles = async () => {
       try {
         const q = query(collection(db, 'articles'), where('published', '==', true), orderBy('createdAt', 'desc'));
-        const snap = await getDocs(q);
+        const snap = await getCachedDocs(q, "articles_published");
         const fetchedArticles = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Article));
         // Filter out explicitly based on current language
         const filteredArticles = fetchedArticles.filter(a => {
