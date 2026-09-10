@@ -80,63 +80,104 @@ export default function Home() {
     <>
       {/* HERO SECTION: DYNAMIC BOOK FOCUS OR STANDARD HERO */}
       {heroBook ? (
-        <section className="relative min-h-[80vh] w-full bg-[#141210] text-white flex items-center justify-center px-6 md:px-12 lg:px-24 py-16 md:py-24 overflow-hidden">
+        <section className="relative min-h-0 lg:min-h-[75vh] w-full bg-[#141210] text-white flex items-center justify-center px-4 sm:px-6 md:px-12 lg:px-24 py-8 sm:py-12 md:py-16 lg:py-24 overflow-hidden">
           {/* Ambient background glow matching book */}
           {heroBook.coverImageUrl && (
             <div 
-              className="absolute right-0 top-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full opacity-20 blur-3xl pointer-events-none -z-0 bg-amber-500/40"
+              className="absolute right-0 top-1/2 -translate-y-1/2 w-[300px] md:w-[600px] h-[300px] md:h-[600px] rounded-full opacity-20 blur-3xl pointer-events-none -z-0 bg-amber-500/40"
             />
           )}
           <div className="absolute inset-0 bg-gradient-to-r from-black/90 via-black/75 to-transparent pointer-events-none" />
 
-          <div className="relative z-10 max-w-[1500px] mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-16 items-center">
-            {/* Left: Book Information & Direct Call To Actions */}
+          <div className="relative z-10 max-w-[1500px] mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-5 sm:gap-8 lg:gap-16 items-center">
+            
+            {/* Book Cover 3D Display - Placed first on mobile for a balanced, centered visual hierarchy */}
             <motion.div 
-              className="lg:col-span-7 space-y-6"
+              className="order-1 lg:order-2 lg:col-span-5 flex flex-col items-center justify-center"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.9, ease: "easeOut", delay: 0.2 }}
+            >
+              <Link to={readMoreUrl} className="group relative block max-w-[135px] sm:max-w-[180px] md:max-w-[280px] lg:max-w-[360px] w-full transition-transform duration-500 hover:scale-[1.03]">
+                {heroBook.coverImageUrl ? (
+                  <div className="relative rounded shadow-[0_12px_30px_-8px_rgba(0,0,0,0.9)] sm:shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9)] border border-white/10 overflow-hidden bg-stone-900 aspect-[2/3]">
+                    <img 
+                      src={heroBook.coverImageUrl} 
+                      alt={bookTitle}
+                      className="w-full h-full object-cover" 
+                    />
+                    {/* Spine gradient effect */}
+                    <div className="absolute inset-y-0 left-0 w-2.5 sm:w-4 bg-gradient-to-r from-black/50 via-transparent to-transparent pointer-events-none" />
+                  </div>
+                ) : (
+                  <div className="w-full aspect-[2/3] bg-stone-900 rounded border border-white/10 flex flex-col items-center justify-center p-4 sm:p-8 text-center shadow-2xl">
+                    <BookOpen className="w-8 h-8 sm:w-12 sm:h-12 text-stone-500 mb-2 sm:mb-4" />
+                    <span className="font-serif text-sm sm:text-xl text-white">{bookTitle}</span>
+                  </div>
+                )}
+              </Link>
+
+              {heroBook.promoQuotes && heroBook.promoQuotes.length > 0 && heroBook.promoQuotes[0]?.quote && (
+                <div className="hidden sm:block mt-3 sm:mt-6 text-center max-w-xs sm:max-w-sm px-2 sm:px-4">
+                  <p className="text-xs sm:text-sm font-serif italic text-stone-300 line-clamp-2">
+                    «{heroBook.promoQuotes[0].quote}»
+                  </p>
+                  {heroBook.promoQuotes[0].author && (
+                    <p className="text-[10px] sm:text-[11px] font-sans tracking-wider uppercase text-amber-400/90 mt-0.5 sm:mt-1">
+                      — {heroBook.promoQuotes[0].author}
+                    </p>
+                  )}
+                </div>
+              )}
+            </motion.div>
+
+            {/* Book Information & Direct Call To Actions */}
+            <motion.div 
+              className="order-2 lg:order-1 lg:col-span-7 space-y-2.5 sm:space-y-4 md:space-y-6 text-center lg:text-left flex flex-col items-center lg:items-start"
               variants={containerVariants}
               initial="hidden"
               animate="visible"
             >
-              {/* Badge */}
-              <motion.div variants={itemVariants} className="flex flex-wrap items-center gap-3">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-400/15 border border-amber-400/30 text-amber-300 text-xs font-semibold tracking-widest uppercase rounded-full">
-                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              {/* Badge & Shipping */}
+              <motion.div variants={itemVariants} className="flex flex-wrap items-center justify-center lg:justify-start gap-2 sm:gap-3">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 sm:px-3 sm:py-1 bg-amber-400/15 border border-amber-400/30 text-amber-300 text-[10px] sm:text-xs font-semibold tracking-widest uppercase rounded-full">
+                  <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-400" />
                   {heroBook.promoBadge || (isAmazon ? (language === 'en' ? 'Available on Amazon' : 'Kjøp på Amazon') : (language === 'en' ? 'Featured Book' : 'Bok i hovudfokus'))}
                 </span>
 
                 {shippingText && (
-                  <span className="inline-flex items-center gap-1.5 text-xs text-stone-300 font-sans">
-                    <Truck className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="inline-flex items-center gap-1.5 text-[11px] sm:text-xs text-stone-300 font-sans">
+                    <Truck className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-400" />
                     <span>{shippingText}</span>
                   </span>
                 )}
               </motion.div>
 
               {/* Title */}
-              <motion.h1 variants={itemVariants} className="text-4xl sm:text-5xl md:text-6xl font-serif leading-[1.1] text-white">
+              <motion.h1 variants={itemVariants} className="text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-serif leading-[1.15] text-white max-w-2xl">
                 {bookTitle}
               </motion.h1>
 
               {/* Promo headline */}
               {heroBook.promoHeadline && (
-                <motion.p variants={itemVariants} className="text-xl sm:text-2xl font-serif italic text-amber-200/95 leading-snug">
+                <motion.p variants={itemVariants} className="text-sm sm:text-lg md:text-xl lg:text-2xl font-serif italic text-amber-200/95 leading-snug max-w-xl">
                   «{heroBook.promoHeadline}»
                 </motion.p>
               )}
 
               {/* Description */}
-              <motion.p variants={itemVariants} className="text-base md:text-lg text-stone-300 font-sans leading-relaxed line-clamp-4 max-w-2xl">
+              <motion.p variants={itemVariants} className="text-xs sm:text-sm md:text-base text-stone-300 font-sans leading-relaxed line-clamp-2 sm:line-clamp-3 md:line-clamp-4 max-w-xl mx-auto lg:mx-0">
                 {bookDescription}
               </motion.p>
 
               {/* Price */}
               {displayPrice > 0 && (
-                <motion.div variants={itemVariants} className="flex items-baseline gap-3 pt-2">
-                  <span className="text-3xl font-serif font-bold text-white">
+                <motion.div variants={itemVariants} className="flex items-baseline justify-center lg:justify-start gap-2.5 sm:gap-3 pt-0.5 sm:pt-2">
+                  <span className="text-xl sm:text-2xl md:text-3xl font-serif font-bold text-white">
                     kr {displayPrice},-
                   </span>
                   {heroBook.promoSpecialPrice && heroBook.price && heroBook.promoSpecialPrice < heroBook.price && (
-                    <span className="text-base text-stone-500 line-through font-sans">
+                    <span className="text-xs sm:text-sm md:text-base text-stone-500 line-through font-sans">
                       kr {heroBook.price},-
                     </span>
                   )}
@@ -144,27 +185,27 @@ export default function Home() {
               )}
 
               {/* Action Buttons: BUY NOW (Direct Stripe/Amazon) & READ MORE */}
-              <motion.div variants={itemVariants} className="flex flex-wrap items-center gap-4 pt-4">
+              <motion.div variants={itemVariants} className="flex flex-wrap items-center justify-center lg:justify-start gap-2.5 sm:gap-4 pt-1 sm:pt-3 w-full">
                 {rawBuyLink ? (
                   <a
                     href={rawBuyLink}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="bg-amber-600 hover:bg-amber-500 text-white font-sans text-xs tracking-[0.15em] uppercase py-4 px-8 inline-flex items-center justify-center gap-2.5 transition-all duration-300 shadow-xl hover:shadow-amber-900/40 font-semibold cursor-pointer"
+                    className="bg-amber-600 hover:bg-amber-500 text-white font-sans text-[11px] sm:text-xs tracking-wider sm:tracking-[0.15em] uppercase py-2.5 px-4 sm:py-3.5 sm:px-7 md:py-4 md:px-8 inline-flex items-center justify-center gap-2 transition-all duration-300 shadow-xl hover:shadow-amber-900/40 font-semibold cursor-pointer"
                   >
                     {isAmazon ? (
                       <>
-                        <ShoppingBag className="w-4 h-4" />
+                        <ShoppingBag className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                         <span>{language === 'en' ? 'BUY ON AMAZON' : 'KJØP PÅ AMAZON'}</span>
                       </>
                     ) : buyLinkType === 'stripe' ? (
                       <>
-                        <CreditCard className="w-4 h-4" />
+                        <CreditCard className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                         <span>{language === 'en' ? 'BUY NOW' : 'KJØP BOKA NO'}</span>
                       </>
                     ) : (
                       <>
-                        <ExternalLink className="w-4 h-4" />
+                        <ExternalLink className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                         <span>{language === 'en' ? 'ORDER BOOK' : 'KJØP BOKA'}</span>
                       </>
                     )}
@@ -172,61 +213,21 @@ export default function Home() {
                 ) : (
                   <Link
                     to={readMoreUrl}
-                    className="bg-amber-600 hover:bg-amber-500 text-white font-sans text-xs tracking-[0.15em] uppercase py-4 px-8 inline-flex items-center justify-center gap-2.5 transition-all duration-300 shadow-xl font-semibold"
+                    className="bg-amber-600 hover:bg-amber-500 text-white font-sans text-[11px] sm:text-xs tracking-wider sm:tracking-[0.15em] uppercase py-2.5 px-4 sm:py-3.5 sm:px-7 md:py-4 md:px-8 inline-flex items-center justify-center gap-2 transition-all duration-300 shadow-xl font-semibold"
                   >
-                    <ShoppingBag className="w-4 h-4" />
+                    <ShoppingBag className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                     <span>{language === 'en' ? 'ORDER BOOK' : 'BESTILL BOKA'}</span>
                   </Link>
                 )}
 
                 <Link
                   to={readMoreUrl}
-                  className="border border-white/80 hover:bg-white hover:text-brand-dark transition-all duration-300 text-white font-sans text-xs tracking-[0.15em] uppercase py-4 px-8 inline-flex items-center justify-center gap-2 font-semibold"
+                  className="border border-white/80 hover:bg-white hover:text-brand-dark transition-all duration-300 text-white font-sans text-[11px] sm:text-xs tracking-wider sm:tracking-[0.15em] uppercase py-2.5 px-4 sm:py-3.5 sm:px-7 md:py-4 md:px-8 inline-flex items-center justify-center gap-1.5 font-semibold"
                 >
-                  <BookOpen className="w-4 h-4" />
+                  <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   <span>{language === 'en' ? 'READ MORE' : 'LES MEIR'}</span>
                 </Link>
               </motion.div>
-            </motion.div>
-
-            {/* Right: Book Cover 3D Display */}
-            <motion.div 
-              className="lg:col-span-5 flex flex-col items-center justify-center"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.9, ease: "easeOut", delay: 0.2 }}
-            >
-              <Link to={readMoreUrl} className="group relative block max-w-[280px] sm:max-w-[340px] md:max-w-[380px] w-full transition-transform duration-500 hover:scale-[1.03]">
-                {heroBook.coverImageUrl ? (
-                  <div className="relative rounded shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9)] border border-white/10 overflow-hidden bg-stone-900 aspect-[2/3]">
-                    <img 
-                      src={heroBook.coverImageUrl} 
-                      alt={bookTitle}
-                      className="w-full h-full object-cover"
-                    />
-                    {/* Spine gradient effect */}
-                    <div className="absolute inset-y-0 left-0 w-4 bg-gradient-to-r from-black/50 via-transparent to-transparent pointer-events-none" />
-                  </div>
-                ) : (
-                  <div className="w-full aspect-[2/3] bg-stone-900 rounded border border-white/10 flex flex-col items-center justify-center p-8 text-center shadow-2xl">
-                    <BookOpen className="w-12 h-12 text-stone-500 mb-4" />
-                    <span className="font-serif text-xl text-white">{bookTitle}</span>
-                  </div>
-                )}
-              </Link>
-
-              {heroBook.promoQuotes && heroBook.promoQuotes.length > 0 && heroBook.promoQuotes[0]?.quote && (
-                <div className="mt-6 text-center max-w-sm px-4">
-                  <p className="text-xs sm:text-sm font-serif italic text-stone-300">
-                    «{heroBook.promoQuotes[0].quote}»
-                  </p>
-                  {heroBook.promoQuotes[0].author && (
-                    <p className="text-[11px] font-sans tracking-wider uppercase text-amber-400/90 mt-1">
-                      — {heroBook.promoQuotes[0].author}
-                    </p>
-                  )}
-                </div>
-              )}
             </motion.div>
           </div>
         </section>
