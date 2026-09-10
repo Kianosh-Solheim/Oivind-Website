@@ -153,16 +153,17 @@ export default function BokSalg() {
   }
 
   const effectivePrice = book.promoSpecialPrice || book.price || 299;
-  const defaultBadge = 'Moglegheit for signert utgåve utan ekstra kostnad';
-  const badgeText = (!book.promoBadge || book.promoBadge === 'Signert utgåve frå forfattaren')
-    ? defaultBadge
-    : book.promoBadge;
-  const headline = book.promoHeadline || 'Ein gripande roman om menneske, val og framtid';
-  const shippingText = book.promoShippingText || 'Fri frakt rett heim i postkassa di';
   const buyUrl = book.buyLink || book.buyLinkEn || '';
   const buyLinkType = getBuyLinkType(buyUrl);
   const isAmazon = buyLinkType === 'amazon';
   const isStripe = buyLinkType === 'stripe';
+
+  const defaultBadge = isAmazon ? 'Tilgjengeleg på Amazon' : 'Moglegheit for signert utgåve utan ekstra kostnad';
+  const badgeText = (!book.promoBadge || book.promoBadge === 'Signert utgåve frå forfattaren' || (isAmazon && book.promoBadge.toLowerCase().includes('signert')))
+    ? defaultBadge
+    : book.promoBadge;
+  const headline = book.promoHeadline || 'Ein gripande roman om menneske, val og framtid';
+  const shippingText = book.promoShippingText || (isAmazon ? 'Levering frå Amazon' : 'Fri frakt rett heim i postkassa di');
   
   const quotes = book.promoQuotes && book.promoQuotes.length > 0 ? book.promoQuotes : [
     {
@@ -305,7 +306,7 @@ export default function BokSalg() {
 
                 <div className="text-left sm:text-right">
                   <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded">
-                    <Check className="w-3.5 h-3.5 text-emerald-600" /> På lager for rask sending
+                    <Check className="w-3.5 h-3.5 text-emerald-600" /> {isAmazon ? 'På lager' : 'På lager for rask sending'}
                   </span>
                   <p className="text-[11px] text-stone-500 mt-1">
                     {shippingText}
@@ -339,12 +340,19 @@ export default function BokSalg() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-6 mt-6 border-t border-stone-100 text-xs text-stone-600">
                 <div className="flex items-center gap-2">
                   <Truck className="w-4 h-4 text-brand-accent shrink-0" />
-                  <span>{isAmazon ? 'Rask levering frå Amazon' : 'Rask levering rett heim'}</span>
+                  <span>{isAmazon ? 'Levering frå Amazon' : 'Rask levering rett heim'}</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <PenTool className="w-4 h-4 text-brand-accent shrink-0" />
-                  <span>Signert utgåve utan ekstra kostnad</span>
-                </div>
+                {isAmazon ? (
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-brand-accent shrink-0" />
+                    <span>Originalutgåve</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <PenTool className="w-4 h-4 text-brand-accent shrink-0" />
+                    <span>Signert utgåve utan ekstra kostnad</span>
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-brand-accent shrink-0" />
                   <span className="font-medium text-stone-800">
@@ -429,21 +437,35 @@ export default function BokSalg() {
             </div>
 
             {/* HIGHLIGHT BULLET POINTS */}
-            {book.promoHighlights && book.promoHighlights.length > 0 && (
-              <div className="mt-10 pt-8 border-t border-stone-100">
-                <h3 className="text-sm font-sans uppercase tracking-widest font-semibold text-brand-dark mb-4">
-                  Kva du kan forvente:
-                </h3>
-                <ul className="grid sm:grid-cols-2 gap-3.5">
-                  {book.promoHighlights.map((hl, i) => (
-                    <li key={i} className="flex items-start gap-2.5 text-sm text-stone-700">
-                      <Check className="w-4 h-4 text-brand-accent shrink-0 mt-0.5" />
-                      <span>{hl}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            {(() => {
+              const rawHighlights = book.promoHighlights && book.promoHighlights.length > 0
+                ? book.promoHighlights
+                : [
+                    'Innbunden kvalitetsbok med vakkert omslag',
+                    isAmazon ? 'Levering frå Amazon' : 'Sendast rett til di postkasse utan ekstra fraktkostnad'
+                  ];
+              const filteredHighlights = rawHighlights.filter(hl => 
+                !isAmazon || (!hl.toLowerCase().includes('signert') && !hl.toLowerCase().includes('signering'))
+              );
+
+              if (filteredHighlights.length === 0) return null;
+
+              return (
+                <div className="mt-10 pt-8 border-t border-stone-100">
+                  <h3 className="text-sm font-sans uppercase tracking-widest font-semibold text-brand-dark mb-4">
+                    Kva du kan forvente:
+                  </h3>
+                  <ul className="grid sm:grid-cols-2 gap-3.5">
+                    {filteredHighlights.map((hl, i) => (
+                      <li key={i} className="flex items-start gap-2.5 text-sm text-stone-700">
+                        <Check className="w-4 h-4 text-brand-accent shrink-0 mt-0.5" />
+                        <span>{hl}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })()}
           </div>
         </div>
 
@@ -531,13 +553,15 @@ export default function BokSalg() {
         <div className="bg-brand-dark text-white p-8 md:p-14 rounded-sm shadow-xl text-center relative overflow-hidden">
           <div className="max-w-2xl mx-auto relative z-10">
             <span className="text-xs uppercase tracking-[0.25em] text-brand-accent font-semibold block mb-3">
-              Direkte frå forfattaren
+              {isAmazon ? 'Tilgjengeleg på Amazon' : 'Direkte frå forfattaren'}
             </span>
             <h2 className="text-3xl md:text-5xl font-serif mb-4 leading-tight">
               Sikre deg eit eksemplar av {book.title}
             </h2>
             <p className="text-stone-300 font-serif text-base md:text-lg mb-8 max-w-xl mx-auto leading-relaxed">
-              Moglegheit for signert utgåve med personleg helsing – heilt utan ekstra kostnad. Boka vert pakka og sendt rett heim i postkassa di.
+              {isAmazon
+                ? 'Bestill boka enkelt og trygt på Amazon med levering rett heim til deg.'
+                : 'Moglegheit for signert utgåve med personleg helsing – heilt utan ekstra kostnad. Boka vert pakka og sendt rett heim i postkassa di.'}
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -567,7 +591,7 @@ export default function BokSalg() {
             </div>
 
             <p className="text-stone-400 text-xs mt-6">
-              {shippingText} • {isAmazon ? 'Kjøp trygt frå Amazon' : isStripe ? 'Trygg betaling med Stripe' : 'Trygg betaling'} • Rask utsending
+              {shippingText} • {isAmazon ? 'Kjøp trygt frå Amazon' : isStripe ? 'Trygg betaling med Stripe' : 'Trygg betaling'} • {isAmazon ? 'Levering frå Amazon' : 'Rask utsending'}
             </p>
           </div>
         </div>
@@ -597,7 +621,7 @@ export default function BokSalg() {
                   {book.title}
                 </h4>
                 <p className="text-[11px] text-stone-500 truncate">
-                  kr {effectivePrice},- • Fri frakt
+                  kr {effectivePrice},- • {isAmazon ? 'Levering frå Amazon' : 'Fri frakt'}
                 </p>
               </div>
             </div>

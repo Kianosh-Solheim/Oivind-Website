@@ -32,6 +32,7 @@ export interface Book {
   promoSpecialPrice?: number;  // Kampanjepris
   promoShippingText?: string;  // Fraktinformasjon (f.eks. "Fri frakt rett i postkassa di")
   authorNote?: string;         // Personleg helsing frå forfattaren
+  isHeroFocus?: boolean;       // Hovudfokus på framsida (erstattar vanleg hero)
 }
 
 export interface Article {
