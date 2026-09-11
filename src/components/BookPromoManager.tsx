@@ -24,6 +24,7 @@ import { invalidateCache } from '../lib/dbCache';
 import { slugify, getBuyLinkType } from '../lib/utils';
 import { Book, BookQuote } from '../types';
 import ImagePickerModal from './ImagePickerModal';
+import AnalyticsModal from './AnalyticsModal';
 
 interface BookPromoManagerProps {
   books: Book[];
@@ -36,8 +37,9 @@ export default function BookPromoManager({
   books, 
   onDataChanged, 
   targetBookId,
-  onClearTargetBookId
-}: BookPromoManagerProps) {
+  onClearTargetBookId,
+  pageStats = {}
+}: BookPromoManagerProps & { pageStats?: Record<string, number> }) {
   const [editingBook, setEditingBook] = useState<Book | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [deletingBook, setDeletingBook] = useState<Book | null>(null);
@@ -45,6 +47,14 @@ export default function BookPromoManager({
   const [isSaving, setIsSaving] = useState(false);
   const [showImagePicker, setShowImagePicker] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [sortBy, setSortBy] = useState<'newest' | 'views'>('newest');
+  
+  // Analytics modal state
+  const [analyticsData, setAnalyticsData] = useState<{isOpen: boolean, bookPath: string, bookTitle: string}>({
+    isOpen: false,
+    bookPath: '',
+    bookTitle: ''
+  });
 
   // Form states
   const [formTitle, setFormTitle] = useState('');
@@ -100,6 +110,19 @@ export default function BookPromoManager({
   }, [books]);
 
   const currentHeroBook = books.find(b => b.isHeroFocus);
+
+  const sortedBooks = [...books].sort((a, b) => {
+    if (sortBy === 'newest') {
+      return (b.publishedYear || 0) - (a.publishedYear || 0);
+    } else if (sortBy === 'views') {
+      const slugA = a.promoSlug || slugify(a.title);
+      const slugB = b.promoSlug || slugify(b.title);
+      const viewsA = pageStats[`/salg/${slugA}`] || 0;
+      const viewsB = pageStats[`/salg/${slugB}`] || 0;
+      return viewsB - viewsA;
+    }
+    return 0;
+  });
 
   const handleStartCreate = () => {
     setEditingBook(null);
@@ -396,6 +419,10 @@ export default function BookPromoManager({
                 'Inga bok er sett til hovudfokus. Den vanlege forfattar-heroen visast på forsida.'
               )}
             </div>
+            <div className="flex items-center gap-1.5 mt-2 text-[11px] text-stone-500 bg-black/5 px-2 py-1.5 rounded-sm inline-flex">
+              <Eye className="w-3.5 h-3.5" />
+              <span>Visningstala (👁) på bøkene under ekskluderer dine eigne klikk når du er innlogga.</span>
+            </div>
           </div>
         </div>
 
@@ -420,9 +447,27 @@ export default function BookPromoManager({
         )}
       </div>
 
+      {/* TOOLBAR */}
+      <div className="flex items-center justify-between gap-4">
+        <h3 className="text-sm font-semibold text-brand-dark uppercase tracking-wider">
+          Dine Bøker
+        </h3>
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-stone-500 uppercase tracking-wider font-semibold">Sorter etter:</span>
+          <select 
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as 'newest' | 'views')}
+            className="border border-stone-200 bg-white text-stone-700 py-1.5 px-3 rounded-sm shadow-sm outline-none focus:border-brand-dark cursor-pointer font-medium"
+          >
+            <option value="newest">Nyaste (År)</option>
+            <option value="views">Mest viste</option>
+          </select>
+        </div>
+      </div>
+
       {/* BOOKS LIST */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {books.map((b) => {
+        {sortedBooks.map((b) => {
           const slug = b.promoSlug || slugify(b.title);
           const fullPath = `/salg/${slug}`;
           const isCopied = copiedId === b.id;
@@ -479,6 +524,20 @@ export default function BookPromoManager({
                       <span>•</span>
                       <span className="uppercase font-semibold text-[10px] text-brand-accent">{b.language || 'no'}</span>
                       {b.pageCount ? <span>• {b.pageCount} s.</span> : null}
+                      {pageStats[fullPath] && (
+                        <>
+                          <span>•</span>
+                          <button 
+                            type="button"
+                            onClick={() => setAnalyticsData({ isOpen: true, bookPath: fullPath, bookTitle: b.title })}
+                            className="inline-flex items-center gap-1 hover:text-brand-dark transition-colors" 
+                            title="Sjå detaljert statistikk for denne boka"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span className="underline decoration-dotted underline-offset-2">{pageStats[fullPath]}</span>
+                          </button>
+                        </>
+                      )}
                     </div>
 
                     <h3 className="font-serif font-bold text-lg text-brand-dark leading-snug line-clamp-2">
@@ -650,6 +709,10 @@ export default function BookPromoManager({
                     <p className="text-stone-600 text-xs leading-relaxed max-w-2xl">
                       Dersom denne toggelen er slått på, erstattast den vanlege hero-seksjonen på forsida av denne boka. Forsida får då ein direkte kjøpsknapp til Stripe/Amazon-lenkja og ein knapp med «Les meir». Berre éi bok om gongen kan vere hovudfokus.
                     </p>
+                    <div className="flex items-center gap-1.5 mt-2 text-[11px] text-stone-500 bg-stone-100 border border-stone-200 px-2 py-1.5 rounded-sm inline-flex">
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Visningstala i statistikken ekskluderer dine eigne klikk når du er innlogga som admin.</span>
+                    </div>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-1">
                     <input
@@ -1223,6 +1286,14 @@ export default function BookPromoManager({
           }}
         />
       )}
+      {/* Analytics Modal */}
+      <AnalyticsModal 
+        isOpen={analyticsData.isOpen}
+        onClose={() => setAnalyticsData(prev => ({ ...prev, isOpen: false }))}
+        bookPath={analyticsData.bookPath}
+        bookTitle={analyticsData.bookTitle}
+      />
+
     </div>
   );
 }

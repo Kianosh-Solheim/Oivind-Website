@@ -1369,6 +1369,12 @@ export default function Admin() {
                 onDataChanged={loadData}
                 targetBookId={promoTargetBookId}
                 onClearTargetBookId={() => setPromoTargetBookId(null)}
+                pageStats={pageStats.reduce((acc, stat) => {
+                  if (stat.path && stat.views) {
+                    acc[stat.path] = stat.views;
+                  }
+                  return acc;
+                }, {} as Record<string, number>)}
               />
             </div>
           </section>

@@ -59,6 +59,10 @@ service cloud.firestore {
     match /pageStats/{statId} {
       allow read, write: if true;
     }
+    match /pageVisits/{visitId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
+    }
 
     // Bestillingar av bøker: Kven som helst kan sende inn ei bestilling, 
     // men KUN admin har lov til å sjå kundelister, adresser og ordrestatus!
