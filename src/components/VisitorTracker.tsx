@@ -1,21 +1,18 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { doc, setDoc, collection, addDoc, increment, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, collection, addDoc, increment, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../lib/AuthContext';
 
 export default function VisitorTracker() {
   const location = useLocation();
-  const { user } = useAuth();
-  const startTime = useRef(Date.now());
-  const currentPath = useRef(location.pathname);
+  const { user, loading } = useAuth();
 
-  // Track initial overall visit
+  // Track initial overall visit (unique session)
   useEffect(() => {
+    if (loading || user) return;
+    
     const trackVisit = async () => {
-      // Do not track logged in admins
-      if (user) return;
-      
       if (sessionStorage.getItem('hasVisited')) return;
       sessionStorage.setItem('hasVisited', 'true');
       
@@ -26,80 +23,75 @@ export default function VisitorTracker() {
           lastVisit: serverTimestamp()
         }, { merge: true });
       } catch (error) {
-        console.error('Failed to track visit:', error);
+        console.error('Failed to track overall visit:', error);
       }
     };
     
     trackVisit();
-  }, [user]);
+  }, [user, loading]);
 
   // Track page views and time spent
   useEffect(() => {
+    if (loading || user) return;
+
     const now = Date.now();
+    const path = location.pathname;
+    const safePath = path === '/' ? 'home' : path.replace(/[^a-zA-Z0-9]/g, '_').substring(1);
     
-    if (currentPath.current !== location.pathname) {
-      const durationSeconds = Math.round((now - startTime.current) / 1000);
-      const prevPath = currentPath.current;
-      const safePath = prevPath === '/' ? 'home' : prevPath.replace(/[^a-zA-Z0-9]/g, '_').substring(1);
-      
-      // Only log if not an admin
-      if (durationSeconds >= 0 && !user) {
-        const pageStatRef = doc(db, 'pageStats', safePath || 'home');
-        setDoc(pageStatRef, {
-          path: prevPath,
-          totalDurationSeconds: increment(durationSeconds),
-          views: increment(1),
-          lastVisit: serverTimestamp()
-        }, { merge: true }).catch(console.error);
+    let currentVisitId: string | null = null;
+    let isUnmounted = false;
 
-        // Log detailed visit
-        addDoc(collection(db, 'pageVisits'), {
-          path: prevPath,
-          durationSeconds,
-          timestamp: new Date().toISOString(),
-          date: new Date().toISOString().split('T')[0], // YYYY-MM-DD format
-          hour: new Date().getHours()
-        }).catch(console.error);
+    // 1. Log view IMMEDIATELY on page land
+    const pageStatRef = doc(db, 'pageStats', safePath || 'home');
+    setDoc(pageStatRef, {
+      path: path,
+      views: increment(1),
+      lastVisit: serverTimestamp()
+    }, { merge: true }).catch(console.error);
+
+    // 2. Create detailed visit IMMEDIATELY
+    addDoc(collection(db, 'pageVisits'), {
+      path: path,
+      durationSeconds: 0,
+      timestamp: new Date().toISOString(),
+      date: new Date().toISOString().split('T')[0],
+      hour: new Date().getHours()
+    }).then(docRef => {
+      if (!isUnmounted) {
+        currentVisitId = docRef.id;
+      } else {
+        // If the user already left before this resolved, update it immediately
+        const durationSeconds = Math.round((Date.now() - now) / 1000);
+        updateDoc(docRef, { durationSeconds }).catch(console.error);
+        setDoc(pageStatRef, { totalDurationSeconds: increment(durationSeconds) }, { merge: true }).catch(console.error);
       }
+    }).catch(console.error);
 
-      currentPath.current = location.pathname;
-      startTime.current = now;
-    }
-
+    // 3. Update duration when unloading the window
     const handleBeforeUnload = () => {
-      // Do not log if admin
-      if (user) return;
-
-      const durationSeconds = Math.round((Date.now() - startTime.current) / 1000);
-      const prevPath = currentPath.current;
-      const safePath = prevPath === '/' ? 'home' : prevPath.replace(/[^a-zA-Z0-9]/g, '_').substring(1);
-      
-      if (durationSeconds >= 0) {
-        const pageStatRef = doc(db, 'pageStats', safePath || 'home');
-        setDoc(pageStatRef, {
-          path: prevPath,
-          totalDurationSeconds: increment(durationSeconds),
-          views: increment(1),
-          lastVisit: serverTimestamp()
-        }, { merge: true }).catch(console.error);
-
-        // Log detailed visit
-        addDoc(collection(db, 'pageVisits'), {
-          path: prevPath,
-          durationSeconds,
-          timestamp: new Date().toISOString(),
-          date: new Date().toISOString().split('T')[0], // YYYY-MM-DD format
-          hour: new Date().getHours()
-        }).catch(console.error);
+      if (currentVisitId) {
+        const durationSeconds = Math.round((Date.now() - now) / 1000);
+        const visitRef = doc(db, 'pageVisits', currentVisitId);
+        updateDoc(visitRef, { durationSeconds }).catch(console.error);
+        setDoc(pageStatRef, { totalDurationSeconds: increment(durationSeconds) }, { merge: true }).catch(console.error);
       }
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
 
+    // 4. Update duration when navigating to another page (unmounting this effect)
     return () => {
+      isUnmounted = true;
       window.removeEventListener('beforeunload', handleBeforeUnload);
+      
+      if (currentVisitId) {
+        const durationSeconds = Math.round((Date.now() - now) / 1000);
+        const visitRef = doc(db, 'pageVisits', currentVisitId);
+        updateDoc(visitRef, { durationSeconds }).catch(console.error);
+        setDoc(pageStatRef, { totalDurationSeconds: increment(durationSeconds) }, { merge: true }).catch(console.error);
+      }
     };
-  }, [location.pathname, user]);
+  }, [location.pathname, user, loading]);
 
   return null;
 }
