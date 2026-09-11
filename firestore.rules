@@ -61,7 +61,8 @@ service cloud.firestore {
     }
     match /pageVisits/{visitId} {
       allow create: if true;
-      allow read, update, delete: if isAdmin();
+      allow update: if true;
+      allow read, delete: if isAdmin();
     }
 
     // Bestillingar av bøker: Kven som helst kan sende inn ei bestilling, 
