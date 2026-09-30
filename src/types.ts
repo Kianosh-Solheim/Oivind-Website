@@ -33,6 +33,41 @@ export interface Book {
   promoShippingText?: string;  // Fraktinformasjon (f.eks. "Fri frakt rett i postkassa di")
   authorNote?: string;         // Personleg helsing frå forfattaren
   isHeroFocus?: boolean;       // Hovudfokus på framsida (erstattar vanleg hero)
+  showReviews?: boolean;       // Om omtaler og «Kva seier lesarane?» skal visast
+  showPromoQuotes?: boolean;   // Alias for showReviews
+}
+
+export interface ElementLocation {
+  id: string;
+  pagePath: string;            // f.eks. "/salg/i-morgon-er-alt-annleis" eller "/"
+  pageTitle?: string;          // f.eks. "I morgon er alt annleis - Salg"
+  selector: string;           // CSS veljar eller element-sti
+  tag: string;                // f.eks. "H1", "SECTION", "DIV"
+  textSnippet?: string;       // Tekstbit frå elementet
+  elementName?: string;       // Skildrande namn
+  position?: { top: number; left: number };
+}
+
+export type RequestScope = 'small' | 'medium' | 'large' | 'feature';
+export type RequestType = 'change' | 'feature';
+export type RequestStatus = 'pending' | 'in_progress' | 'completed' | 'declined';
+
+export interface ChangeRequest {
+  id?: string;
+  title: string;
+  type: RequestType;          // 'change' | 'feature'
+  scope: RequestScope;        // 'small' | 'medium' | 'large' | 'feature'
+  description: string;
+  selectedLocations: ElementLocation[];
+  willingToPay?: string;      // F.eks. "1500 kr" (krevst/spørst for middels, stor, ny funksjon)
+  deadline?: string;          // F.eks. "Innan 2 veker" / dato
+  requestedByEmail: string;   // F.eks. "oivindsolheim@gmail.com"
+  requestedByName?: string;
+  assignedToEmail: string;    // F.eks. "kianoshsolheim@gmail.com"
+  status: RequestStatus;      // 'pending' | 'in_progress' | 'completed' | 'declined'
+  developerNotes?: string;    // Svar/kommentarar frå Kianosh
+  createdAt?: any;
+  updatedAt?: any;
 }
 
 export interface Article {

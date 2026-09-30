@@ -51,6 +51,11 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Endrings- og funksjonsførespurnader:
+    match /change_requests/{requestId} {
+      allow read, write: if true;
+    }
+
     // Besøks- og sidestatistikk: Må kunne oppdaterast automatisk av lesarar
     match /stats/{statId} {
       allow read, write: if true;

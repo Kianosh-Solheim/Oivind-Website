@@ -16,7 +16,8 @@ import {
   CreditCard,
   Truck,
   Eye,
-  AlertCircle
+  AlertCircle,
+  MessageSquare
 } from 'lucide-react';
 import { doc, updateDoc, addDoc, deleteDoc, collection, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -85,6 +86,7 @@ export default function BookPromoManager({
   const [formQuotes, setFormQuotes] = useState<BookQuote[]>([]);
   const [formHighlights, setFormHighlights] = useState<string[]>([]);
   const [formAuthorNote, setFormAuthorNote] = useState('');
+  const [formShowReviews, setFormShowReviews] = useState(true);
 
   // Target book editing trigger
   useEffect(() => {
@@ -160,6 +162,7 @@ export default function BookPromoManager({
       'Rask levering rett til di postkasse'
     ]);
     setFormAuthorNote('');
+    setFormShowReviews(true);
   };
 
   const handleStartEdit = (b: Book) => {
@@ -204,6 +207,25 @@ export default function BookPromoManager({
       isAmazonBook ? 'Trygg handel via Amazon' : 'Sendast rett til di postkasse utan ekstra fraktkostnad'
     ]);
     setFormAuthorNote(b.authorNote || '');
+    setFormShowReviews(b.showReviews !== false && b.showPromoQuotes !== false);
+  };
+
+  const handleToggleReviews = async (b: Book, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!b.id) return;
+    const currentVal = b.showReviews !== false && b.showPromoQuotes !== false;
+    const newVal = !currentVal;
+    try {
+      await updateDoc(doc(db, 'books', b.id), {
+        showReviews: newVal,
+        showPromoQuotes: newVal,
+        updatedAt: serverTimestamp(),
+      });
+      invalidateCache();
+      onDataChanged();
+    } catch (err) {
+      console.error('Feil ved endring av omtalevising:', err);
+    }
   };
 
   const handleCopyLink = (b: Book) => {
@@ -277,6 +299,8 @@ export default function BookPromoManager({
         promoSpecialPrice: formSpecialPrice ? Number(formSpecialPrice) : null,
         promoShippingText: formShippingText.trim(),
         promoDirectSale: formDirectSale,
+        showReviews: formShowReviews,
+        showPromoQuotes: formShowReviews,
         promoQuotes: formQuotes.filter(q => q.quote.trim() !== ''),
         promoHighlights: formHighlights.filter(h => h.trim() !== ''),
         authorNote: formAuthorNote.trim(),
@@ -584,6 +608,23 @@ export default function BookPromoManager({
                           Ingen kjøpslenkje lagt inn
                         </span>
                       )}
+                    </div>
+
+                    {/* REVIEWS VISIBILITY BADGE / TOGGLE */}
+                    <div className="mt-2.5 flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={(e) => handleToggleReviews(b, e)}
+                        title="Trykk for å endre om omtaler og «Kva seier lesarane?» skal visast på boksida"
+                        className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded border transition-colors flex items-center gap-1.5 ${
+                          (b.showReviews !== false && b.showPromoQuotes !== false)
+                            ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                            : 'bg-stone-100 text-stone-500 border-stone-200 line-through hover:bg-stone-200'
+                        }`}
+                      >
+                        <MessageSquare className="w-3 h-3" />
+                        <span>{(b.showReviews !== false && b.showPromoQuotes !== false) ? 'Omtaler: Synleg' : 'Omtaler: Skjult'}</span>
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1143,54 +1184,82 @@ export default function BookPromoManager({
 
                 {/* QUOTES & REVIEWS */}
                 <div className="space-y-3 pt-2">
-                  <div className="flex items-center justify-between">
-                    <label className="font-semibold uppercase tracking-wider text-brand-dark text-[11px]">
-                      Sitat & Omtaler
+                  <div className="flex items-center justify-between p-3.5 bg-stone-50 border border-stone-200 rounded">
+                    <div>
+                      <span className="font-semibold uppercase tracking-wider text-brand-dark text-xs block">
+                        Vis omtaler og «Kva seier lesarane?»
+                      </span>
+                      <span className="text-[11px] text-stone-500 block">
+                        Vel om omtaler, lesarstemmer og «Kva seier lesarane?» skal visast på boksida.
+                      </span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0 ml-3">
+                      <input
+                        type="checkbox"
+                        checked={formShowReviews}
+                        onChange={(e) => setFormShowReviews(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-stone-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
                     </label>
-                    <button
-                      type="button"
-                      onClick={addQuote}
-                      className="text-[11px] font-semibold text-brand-accent hover:text-brand-dark flex items-center gap-1"
-                    >
-                      <Plus className="w-3 h-3" /> Legg til sitat
-                    </button>
                   </div>
-                  {formQuotes.map((q, i) => (
-                    <div key={i} className="p-3 bg-stone-50 border border-stone-200 rounded space-y-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <textarea
-                          rows={2}
-                          value={q.quote}
-                          onChange={(e) => updateQuote(i, 'quote', e.target.value)}
-                          placeholder="«Ei bok som sit i lenge etterpå...»"
-                          className="flex-grow p-2 border border-stone-300 focus:border-brand-dark outline-none text-xs font-serif bg-white"
-                        />
+
+                  {formShowReviews ? (
+                    <div className="space-y-3 pt-1">
+                      <div className="flex items-center justify-between">
+                        <label className="font-semibold uppercase tracking-wider text-brand-dark text-[11px]">
+                          Sitat & Omtaler
+                        </label>
                         <button
                           type="button"
-                          onClick={() => removeQuote(i)}
-                          className="p-1 text-red-500 hover:text-red-700"
+                          onClick={addQuote}
+                          className="text-[11px] font-semibold text-brand-accent hover:text-brand-dark flex items-center gap-1"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Plus className="w-3 h-3" /> Legg til sitat
                         </button>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <input
-                          type="text"
-                          value={q.author || ''}
-                          onChange={(e) => updateQuote(i, 'author', e.target.value)}
-                          placeholder="Namn (f.eks. Anna, lesar)"
-                          className="p-1.5 border border-stone-300 focus:border-brand-dark outline-none text-xs bg-white"
-                        />
-                        <input
-                          type="text"
-                          value={q.source || ''}
-                          onChange={(e) => updateQuote(i, 'source', e.target.value)}
-                          placeholder="Kjelde (f.eks. Goodreads / Omtale)"
-                          className="p-1.5 border border-stone-300 focus:border-brand-dark outline-none text-xs bg-white"
-                        />
-                      </div>
+                      {formQuotes.map((q, i) => (
+                        <div key={i} className="p-3 bg-stone-50 border border-stone-200 rounded space-y-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <textarea
+                              rows={2}
+                              value={q.quote}
+                              onChange={(e) => updateQuote(i, 'quote', e.target.value)}
+                              placeholder="«Ei bok som sit i lenge etterpå...»"
+                              className="flex-grow p-2 border border-stone-300 focus:border-brand-dark outline-none text-xs font-serif bg-white"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => removeQuote(i)}
+                              className="p-1 text-red-500 hover:text-red-700"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <input
+                              type="text"
+                              value={q.author || ''}
+                              onChange={(e) => updateQuote(i, 'author', e.target.value)}
+                              placeholder="Namn (f.eks. Anna, lesar)"
+                              className="p-1.5 border border-stone-300 focus:border-brand-dark outline-none text-xs bg-white"
+                            />
+                            <input
+                              type="text"
+                              value={q.source || ''}
+                              onChange={(e) => updateQuote(i, 'source', e.target.value)}
+                              placeholder="Kjelde (f.eks. Goodreads / Omtale)"
+                              className="p-1.5 border border-stone-300 focus:border-brand-dark outline-none text-xs bg-white"
+                            />
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  ) : (
+                    <div className="p-3 bg-amber-50 border border-amber-200/80 rounded text-xs text-amber-900">
+                      Omtaler og «Kva seier lesarane?» er no slått av for denne boka og vil <strong>ikkje</strong> bli viste for lesarane.
+                    </div>
+                  )}
                 </div>
 
                 {/* AUTHOR NOTE */}

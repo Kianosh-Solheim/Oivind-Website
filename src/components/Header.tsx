@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Menu, X, Settings } from 'lucide-react';
+import { Menu, X, Settings, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../lib/AuthContext';
@@ -76,7 +76,17 @@ export default function Header() {
           </motion.div>
           
           {user && (
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.75 }} className="ml-2 flex items-center">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.75 }} className="ml-2 flex items-center gap-2">
+              {isAdmin && (
+                <Link 
+                  to="/admin?tab=requests" 
+                  className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-900 border border-amber-500/40 rounded text-[11px] font-semibold tracking-wider uppercase transition-colors" 
+                  title="Be om endring eller ny funksjon"
+                >
+                  <Sparkles className="w-3 h-3 text-amber-600" />
+                  <span>Be om endring</span>
+                </Link>
+              )}
               <Link to="/admin" className="text-brand-dark hover:text-brand-accent transition-colors" title="Admin">
                 <Settings className="w-5 h-5" />
               </Link>

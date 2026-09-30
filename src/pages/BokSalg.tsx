@@ -21,11 +21,13 @@ import { getCachedDocs } from '../lib/dbCache';
 import { motion, AnimatePresence } from 'motion/react';
 import { slugify, getBuyLinkType } from '../lib/utils';
 import { Book, AboutSettings } from '../types';
+import { useAuth } from '../lib/AuthContext';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 export default function BokSalg() {
   const { slug } = useParams<{ slug?: string }>();
+  const { isAdmin } = useAuth();
   const [book, setBook] = useState<Book | null>(null);
   const [, setAllBooks] = useState<Book[]>([]);
   const [aboutData, setAboutData] = useState<AboutSettings | null>(null);
@@ -165,6 +167,9 @@ export default function BokSalg() {
   const headline = book.promoHeadline || 'Ein gripande roman om menneske, val og framtid';
   const shippingText = book.promoShippingText || (isAmazon ? 'Levering frå Amazon' : 'Fri frakt rett heim i postkassa di');
   
+  const isReviewsExplicitlyOff = book.showReviews === false || book.showPromoQuotes === false;
+  const showReviewsSection = !isReviewsExplicitlyOff;
+
   const quotes = book.promoQuotes && book.promoQuotes.length > 0 ? book.promoQuotes : [
     {
       quote: "Bøker som opnar dører til refleksjon og djupare meining.",
@@ -384,7 +389,7 @@ export default function BokSalg() {
       </section>
 
       {/* FEATURED QUOTE / REVIEWS SECTION */}
-      {quotes.length > 0 && (
+      {showReviewsSection && quotes.length > 0 && (
         <section className="bg-white border-y border-stone-200/70 py-16 px-6 md:px-12">
           <div className="max-w-4xl mx-auto">
             <div className="text-center mb-10">
@@ -416,6 +421,13 @@ export default function BokSalg() {
             </div>
           </div>
         </section>
+      )}
+
+      {/* ADMIN NOTICE WHEN REVIEWS ARE EXPLICITLY HIDDEN */}
+      {isAdmin && !showReviewsSection && (
+        <div className="bg-stone-100 border-y border-stone-200 py-3.5 px-6 text-center text-xs text-stone-600 font-sans">
+          <span className="font-semibold text-stone-900">Merk (synleg berre for admin):</span> Omtaler og «Kva seier lesarane?» er for tida slått <strong>av</strong> for denne boka. Du kan slå det på att i kontrollpanelet under «Bøker & Salg».
+        </div>
       )}
 
       {/* STORY & BOOK DETAILS (TEKST LENGER NED) */}

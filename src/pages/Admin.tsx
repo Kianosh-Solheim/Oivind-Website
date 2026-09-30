@@ -12,6 +12,7 @@ import FileManager from '../components/FileManager';
 import ImagePickerModal from '../components/ImagePickerModal';
 import BackupManager from '../components/BackupManager';
 import BookPromoManager from '../components/BookPromoManager';
+import ChangeRequestManager from '../components/ChangeRequestManager';
 import { getBuyLinkType } from '../lib/utils';
 
 interface Article {
@@ -122,7 +123,7 @@ export default function Admin() {
   const [articleForm, setArticleForm] = useState({ title: '', content: '', published: true, language: 'no', slug: '', imageUrl: '', imageCaption: '', translationId: '' });
   const [infoDialog, setInfoDialog] = useState<{title: string, content: React.ReactNode} | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{title: string, message: string, onConfirm: () => void} | null>(null);
-  const [dashboardTab, setDashboardTab] = useState<'overview' | 'articles' | 'books' | 'promo' | 'diary' | 'files' | 'about' | 'photos' | 'orders' | 'backup'>('overview');
+  const [dashboardTab, setDashboardTab] = useState<'overview' | 'articles' | 'books' | 'promo' | 'diary' | 'files' | 'about' | 'photos' | 'orders' | 'backup' | 'requests'>('overview');
   const [promoTargetBookId, setPromoTargetBookId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   
@@ -149,7 +150,7 @@ export default function Admin() {
     if (user) {
       const params = new URLSearchParams(location.search);
       const tabParam = params.get('tab');
-      if (tabParam === 'books' || tabParam === 'promo' || tabParam === 'files' || tabParam === 'articles' || tabParam === 'diary' || tabParam === 'about' || tabParam === 'photos' || tabParam === 'orders' || tabParam === 'backup') {
+      if (tabParam === 'books' || tabParam === 'promo' || tabParam === 'files' || tabParam === 'articles' || tabParam === 'diary' || tabParam === 'about' || tabParam === 'photos' || tabParam === 'orders' || tabParam === 'backup' || tabParam === 'requests') {
         setDashboardTab(tabParam as any);
       }
       
@@ -1168,6 +1169,13 @@ export default function Admin() {
             >
               Sikkerheitskopi
             </button>
+            <button 
+              onClick={() => setDashboardTab('requests')} 
+              className={`text-left px-4 py-3 text-xs tracking-widest uppercase font-semibold transition-colors shrink-0 flex items-center justify-between gap-1.5 ${dashboardTab === 'requests' ? 'bg-amber-600 text-white' : 'text-amber-800 bg-amber-50/70 hover:bg-amber-100 hover:text-amber-950 font-bold border-l-2 border-amber-500'}`}
+            >
+              <span>Be om endring / Ny funksjon</span>
+              <Sparkles className={`w-3.5 h-3.5 ${dashboardTab === 'requests' ? 'text-white' : 'text-amber-600'}`} />
+            </button>
           </nav>
           
           <div className="mt-8 p-4 border border-brand-sand bg-gray-50 flex flex-col gap-3">
@@ -1795,6 +1803,11 @@ export default function Admin() {
                 pageStats,
               }}
             />
+          )}
+
+          {/* ENDRINGSYNSKJER OG NYE FUNKSJONAR */}
+          {dashboardTab === 'requests' && (
+            <ChangeRequestManager />
           )}
 
           {showBookImagePicker && (

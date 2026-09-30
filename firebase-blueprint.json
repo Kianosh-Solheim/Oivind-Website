@@ -38,12 +38,35 @@
         "promoExcerpt": { "type": "string" },
         "promoSpecialPrice": { "type": "number" },
         "promoShippingText": { "type": "string" },
+        "showReviews": { "type": "boolean", "description": "Whether reviews and 'Kva seier lesarane?' section is shown" },
+        "showPromoQuotes": { "type": "boolean", "description": "Alias for showReviews" },
         "authorNote": { "type": "string" },
         "createdAt": { "type": "number", "description": "Timestamp" },
         "updatedAt": { "type": "number", "description": "Timestamp" },
         "authorId": { "type": "string" }
       },
       "required": ["title", "description", "publishedYear", "createdAt", "updatedAt", "authorId"]
+    },
+    "changeRequest": {
+      "title": "ChangeRequest",
+      "description": "A feature or change request submitted by oivindsolheim@gmail.com to kianoshsolheim@gmail.com.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "type": { "type": "string", "enum": ["change", "feature"] },
+        "scope": { "type": "string", "enum": ["small", "medium", "large", "feature"] },
+        "description": { "type": "string" },
+        "willingToPay": { "type": "string" },
+        "deadline": { "type": "string" },
+        "requestedByEmail": { "type": "string" },
+        "requestedByName": { "type": "string" },
+        "assignedToEmail": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "in_progress", "completed", "declined"] },
+        "developerNotes": { "type": "string" },
+        "createdAt": { "type": "number", "description": "Timestamp" },
+        "updatedAt": { "type": "number", "description": "Timestamp" }
+      },
+      "required": ["title", "type", "scope", "description", "requestedByEmail", "status"]
     },
     "galleryPhoto": {
       "title": "GalleryPhoto",
@@ -70,6 +93,10 @@
     "gallery": {
       "schema": { "$ref": "#/entities/galleryPhoto" },
       "description": "Collection of gallery photos."
+    },
+    "change_requests": {
+      "schema": { "$ref": "#/entities/changeRequest" },
+      "description": "Collection of change and feature requests between Øivind and Kianosh."
     }
   }
 }
