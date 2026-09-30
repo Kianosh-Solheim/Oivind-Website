@@ -8,7 +8,7 @@ import { useAuth } from '../lib/AuthContext';
 export default function Header() {
   const location = useLocation();
   const { language, setLanguage, t } = useLanguage();
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
 
   const isComposing = location.pathname.startsWith('/admin') && (location.search.includes('compose=true') || location.search.includes('edit='));
@@ -20,7 +20,7 @@ export default function Header() {
   const navLinks = [
     { to: '/', label: t('HOME') },
     { to: '/refleksjonar', label: t('REFLECTIONS') },
-    { to: '/dagbok', label: t('DIARY') },
+    ...(isAdmin ? [{ to: '/dagbok', label: t('DIARY') }] : []),
     { to: '/boker', label: t('BOOKS') },
     { to: '/om-meg', label: t('ABOUT') },
     { to: '/kontakt', label: t('CONTACT') },

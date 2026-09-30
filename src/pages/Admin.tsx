@@ -93,7 +93,7 @@ interface GalleryPhoto {
 }
 
 export default function Admin() {
-  const { user, signInWithGoogle, logout } = useAuth();
+  const { user, isAdmin, signInWithGoogle, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   
@@ -612,6 +612,23 @@ export default function Admin() {
         <h1 className="text-3xl font-serif mb-6">Admin Logg Inn</h1>
         <button onClick={signInWithGoogle} className="px-6 py-3 bg-brand-dark text-white text-sm tracking-widest hover:bg-black transition-colors">
           LOGG INN MED GOOGLE
+        </button>
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen py-32 px-6 flex flex-col items-center justify-center text-center max-w-md mx-auto">
+        <h1 className="text-3xl font-serif mb-4">Ingen tilgang</h1>
+        <p className="text-sm text-brand-dark/70 font-sans mb-3">
+          Kontoen din har ikkje administratorrettigheiter for dette nettstaden.
+        </p>
+        <p className="text-xs text-brand-muted font-mono bg-gray-50 py-1.5 px-3 rounded mb-6 break-all">
+          {user.email}
+        </p>
+        <button onClick={logout} className="px-6 py-3 bg-brand-dark text-white text-xs tracking-widest uppercase hover:bg-black transition-colors">
+          Logg ut / Byt konto
         </button>
       </div>
     );

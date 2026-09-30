@@ -243,7 +243,7 @@ export default function BokSalg() {
                   <div className="aspect-[1/1.5] bg-stone-100 flex flex-col items-center justify-center p-8 text-center border border-dashed border-stone-300">
                     <BookOpen className="w-16 h-16 text-stone-300 mb-3" strokeWidth={1} />
                     <span className="font-serif text-lg font-bold text-brand-dark line-clamp-3">{book.title}</span>
-                    <span className="text-xs text-brand-muted mt-2">Øivind H. Solheim</span>
+                    <span className="text-xs text-brand-muted mt-2">av Øivind H. Solheim</span>
                   </div>
                 )}
               </div>
@@ -277,7 +277,7 @@ export default function BokSalg() {
 
             {/* AUTHOR CREDIT */}
             <p className="text-sm font-sans tracking-widest uppercase font-semibold text-brand-accent mb-6">
-              Roman av Øivind H. Solheim
+              av Øivind H. Solheim
             </p>
 
             {/* HERO TAGLINE / SLAGORD */}

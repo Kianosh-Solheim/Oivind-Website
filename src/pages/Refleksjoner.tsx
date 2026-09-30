@@ -22,11 +22,9 @@ interface Article {
 export default function Refleksjoner() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [loading, setLoading] = useState(true);
-  const { user } = useAuth();
+  const { user, isAdmin } = useAuth();
   const navigate = useNavigate();
   const { t, language } = useLanguage();
-
-  const isAdmin = user?.email?.toLowerCase() === 'kianoshsolheim@gmail.com' || user?.email?.toLowerCase() === 'oivindsolheim@gmail.com';
 
   useEffect(() => {
     const fetchArticles = async () => {

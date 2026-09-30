@@ -253,10 +253,14 @@ export default function Romanar() {
                   </div>
 
                   <Link to={detailUrl}>
-                    <h2 className="text-3xl sm:text-4xl font-serif text-brand-dark hover:text-brand-accent transition-colors mb-3 leading-tight">
+                    <h2 className="text-3xl sm:text-4xl font-serif text-brand-dark hover:text-brand-accent transition-colors mb-2 leading-tight">
                       {spotlightTitle}
                     </h2>
                   </Link>
+
+                  <p className="text-xs font-sans uppercase tracking-widest font-semibold text-brand-accent mb-3">
+                    av Øivind H. Solheim
+                  </p>
 
                   {spotlightBook.promoHeadline && (
                     <p className="text-base sm:text-lg font-serif italic text-stone-700 leading-snug mb-4 border-l-2 border-amber-600 pl-3.5">
@@ -517,10 +521,14 @@ export default function Romanar() {
 
                     {/* TITLE */}
                     <Link to={salesUrl}>
-                      <h3 className="text-xl sm:text-2xl font-serif text-brand-dark group-hover:text-brand-accent transition-colors mb-2 leading-tight">
+                      <h3 className="text-xl sm:text-2xl font-serif text-brand-dark group-hover:text-brand-accent transition-colors mb-1.5 leading-tight">
                         {displayTitle}
                       </h3>
                     </Link>
+
+                    <p className="text-[11px] font-sans uppercase tracking-widest font-semibold text-brand-accent mb-2">
+                      av Øivind H. Solheim
+                    </p>
 
                     {/* HEADLINE OR SHORT PROMO */}
                     {book.promoHeadline && (

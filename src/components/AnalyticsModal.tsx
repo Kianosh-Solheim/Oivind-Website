@@ -23,6 +23,7 @@ interface Visit {
 
 export default function AnalyticsModal({ isOpen, onClose, bookPath, bookTitle }: AnalyticsModalProps) {
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [visits, setVisits] = useState<Visit[]>([]);
   const [timeframe, setTimeframe] = useState<'day' | 'month' | 'year'>('day');
 
@@ -31,18 +32,35 @@ export default function AnalyticsModal({ isOpen, onClose, bookPath, bookTitle }:
 
     const fetchVisits = async () => {
       setLoading(true);
+      setErrorMsg(null);
       try {
-        const q = query(
-          collection(db, 'pageVisits'),
+        const safePath = bookPath === '/' ? 'home' : bookPath.replace(/[^a-zA-Z0-9]/g, '_').substring(1);
+
+        // Try query by exact path first
+        let q = query(
+          collection(db, 'stats'),
+          where('type', '==', 'page_visit'),
           where('path', '==', bookPath)
         );
-        const snap = await getDocs(q);
+        let snap = await getDocs(q);
+        
+        // Fallback for older entries where we might have stored safePath instead
+        if (snap.empty) {
+            q = query(
+                collection(db, 'stats'),
+                where('type', '==', 'page_visit'),
+                where('path', '==', safePath)
+            );
+            snap = await getDocs(q);
+        }
+        
         const data = snap.docs.map(doc => doc.data() as Visit);
         // Sort in memory by timestamp
         data.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
         setVisits(data);
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error fetching analytics", error);
+        setErrorMsg(error.message || "Ukjend feil oppstod ved henting av statistikk.");
       } finally {
         setLoading(false);
       }
@@ -112,6 +130,11 @@ export default function AnalyticsModal({ isOpen, onClose, bookPath, bookTitle }:
             <div className="flex flex-col items-center justify-center py-20 text-stone-400">
               <Loader2 className="w-8 h-8 animate-spin mb-4" />
               <p>Hentar statistikk...</p>
+            </div>
+          ) : errorMsg ? (
+            <div className="text-center py-20 text-red-600 bg-red-50 p-6 rounded-md">
+              <h3 className="font-bold mb-2 text-lg">Feil ved henting av data</h3>
+              <p className="font-mono text-sm">{errorMsg}</p>
             </div>
           ) : visits.length === 0 ? (
             <div className="text-center py-20 text-stone-500">

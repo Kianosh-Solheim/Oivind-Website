@@ -34,10 +34,9 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Dagbok: Berre publiserte kan lesast av alle, admin styrer alt
+    // Dagbok: Privat seksjon - berre administrator kan lese og skrive
     match /diary/{diaryId} {
-      allow read: if resource.data.published == true || isAdmin();
-      allow write: if isAdmin();
+      allow read, write: if isAdmin();
     }
 
     // Fotogalleri: Alle kan sjå foto, berre admin kan redigere
@@ -57,12 +56,16 @@ service cloud.firestore {
       allow read, write: if true;
     }
     match /pageStats/{statId} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
     match /pageVisits/{visitId} {
-      allow create: if true;
-      allow update: if true;
-      allow read, delete: if isAdmin();
+      allow read, write: if true;
+    }
+    match /visitors/{visitorId} {
+      allow read, write: if true;
+    }
+    match /page_views/{viewId} {
+      allow read, write: if true;
     }
 
     // Bestillingar av bøker: Kven som helst kan sende inn ei bestilling, 

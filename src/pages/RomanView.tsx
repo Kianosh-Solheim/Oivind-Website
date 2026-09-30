@@ -160,7 +160,7 @@ export default function RomanView() {
               </h1>
 
               <div className="text-xs font-semibold tracking-widest uppercase text-brand-accent mb-6">
-                Øivind H. Solheim
+                av Øivind H. Solheim
               </div>
 
               {/* HEADLINE */}

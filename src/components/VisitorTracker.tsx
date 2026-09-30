@@ -32,7 +32,11 @@ export default function VisitorTracker() {
 
   // Track page views and time spent
   useEffect(() => {
-    if (loading || user) return;
+    // Only proceed once auth state is firmly established (loading is false)
+    if (loading) return;
+    
+    // If user is logged in (admin), don't track
+    if (user) return;
 
     const now = Date.now();
     const path = location.pathname;
@@ -49,8 +53,9 @@ export default function VisitorTracker() {
       lastVisit: serverTimestamp()
     }, { merge: true }).catch(console.error);
 
-    // 2. Create detailed visit IMMEDIATELY
-    addDoc(collection(db, 'pageVisits'), {
+    // 2. Create detailed visit IMMEDIATELY in stats collection to bypass permission issues
+    addDoc(collection(db, 'stats'), {
+      type: 'page_visit',
       path: path,
       durationSeconds: 0,
       timestamp: new Date().toISOString(),
@@ -71,7 +76,7 @@ export default function VisitorTracker() {
     const handleBeforeUnload = () => {
       if (currentVisitId) {
         const durationSeconds = Math.round((Date.now() - now) / 1000);
-        const visitRef = doc(db, 'pageVisits', currentVisitId);
+        const visitRef = doc(db, 'stats', currentVisitId);
         updateDoc(visitRef, { durationSeconds }).catch(console.error);
         setDoc(pageStatRef, { totalDurationSeconds: increment(durationSeconds) }, { merge: true }).catch(console.error);
       }
@@ -86,12 +91,12 @@ export default function VisitorTracker() {
       
       if (currentVisitId) {
         const durationSeconds = Math.round((Date.now() - now) / 1000);
-        const visitRef = doc(db, 'pageVisits', currentVisitId);
+        const visitRef = doc(db, 'stats', currentVisitId);
         updateDoc(visitRef, { durationSeconds }).catch(console.error);
         setDoc(pageStatRef, { totalDurationSeconds: increment(durationSeconds) }, { merge: true }).catch(console.error);
       }
     };
-  }, [location.pathname, user, loading]);
+  }, [location.pathname, loading, user]);
 
   return null;
 }

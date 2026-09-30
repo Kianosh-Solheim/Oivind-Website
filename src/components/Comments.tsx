@@ -34,10 +34,8 @@ export default function Comments({ articleId, initialQuote = '', comments, loadi
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   
-  const { user, signInWithGoogle } = useAuth();
+  const { user, isAdmin, signInWithGoogle } = useAuth();
   const { language } = useLanguage();
-  
-  const isAdmin = user?.email?.toLowerCase() === 'kianoshsolheim@gmail.com' || user?.email?.toLowerCase() === 'oivindsolheim@gmail.com';
 
   useEffect(() => {
     setActiveQuote(initialQuote);

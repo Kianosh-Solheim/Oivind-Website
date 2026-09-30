@@ -2,9 +2,20 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { User, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
 import { auth } from './firebase';
 
+export const ADMIN_EMAILS = [
+  'kianoshsolheim@gmail.com',
+  'oivindsolheim@gmail.com'
+];
+
+export function checkIsAdmin(email?: string | null): boolean {
+  if (!email) return false;
+  return ADMIN_EMAILS.includes(email.toLowerCase().trim());
+}
+
 interface AuthContextType {
   user: User | null;
   loading: boolean;
+  isAdmin: boolean;
   signInWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -45,8 +56,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await signOut(auth);
   };
 
+  const isAdmin = checkIsAdmin(user?.email);
+
   return (
-    <AuthContext.Provider value={{ user, loading, signInWithGoogle, logout }}>
+    <AuthContext.Provider value={{ user, loading, isAdmin, signInWithGoogle, logout }}>
       {children}
     </AuthContext.Provider>
   );
