@@ -8,7 +8,8 @@ import {
   updateDoc, 
   deleteDoc, 
   doc, 
-  serverTimestamp 
+  serverTimestamp,
+  getDocs
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useAuth } from '../lib/AuthContext';
@@ -33,7 +34,11 @@ import {
   X,
   Filter,
   DollarSign,
-  Calendar
+  Calendar,
+  Mail,
+  Copy,
+  ShieldAlert,
+  Info
 } from 'lucide-react';
 
 export default function ChangeRequestManager() {
@@ -46,6 +51,9 @@ export default function ChangeRequestManager() {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterScope, setFilterScope] = useState<string>('all');
   const [selectedRequest, setSelectedRequest] = useState<ChangeRequest | null>(null);
+  const [isAdBlockDetected, setIsAdBlockDetected] = useState(false);
+  const [showRulesInfo, setShowRulesInfo] = useState(false);
+  const [copiedText, setCopiedText] = useState(false);
 
   // Form State
   const [formTitle, setFormTitle] = useState('');
@@ -57,6 +65,7 @@ export default function ChangeRequestManager() {
   const [formLocations, setFormLocations] = useState<ElementLocation[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // Response / Admin update state
   const [replyText, setReplyText] = useState('');
@@ -70,51 +79,93 @@ export default function ChangeRequestManager() {
   useEffect(() => {
     if (pickedElements && pickedElements.length > 0) {
       setFormLocations(pickedElements);
-      // Auto open form if elements were just picked
       setActiveTab('new');
     }
   }, [pickedElements]);
 
-  // Subscribe to change requests in Firestore
+  // Subscribe to change requests in Firestore with robust multi-collection fallback
   useEffect(() => {
-    let unsubscribe = () => {};
-    try {
-      const colRef = collection(db, 'change_requests');
-      const q = query(colRef, orderBy('createdAt', 'desc'));
-      unsubscribe = onSnapshot(q, (snapshot) => {
-        const list: ChangeRequest[] = [];
-        snapshot.forEach((docSnap) => {
-          list.push({ id: docSnap.id, ...docSnap.data() } as ChangeRequest);
-        });
-        setRequests(list);
-        setLoading(false);
-      }, (error) => {
-        console.warn('Kunne ikkje hente med orderBy, prøver enkel spørring:', error);
-        // Fallback to simple collection snapshot without orderBy in case of missing index
-        const unsubFallback = onSnapshot(colRef, (snap2) => {
-          const list2: ChangeRequest[] = [];
-          snap2.forEach((docSnap) => {
-            list2.push({ id: docSnap.id, ...docSnap.data() } as ChangeRequest);
-          });
-          list2.sort((a, b) => {
-            const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt || 0);
-            const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt || 0);
-            return timeB - timeA;
-          });
-          setRequests(list2);
-          setLoading(false);
-        }, (err2) => {
-          console.warn('Feil ved henting av endringsførespurnader:', err2?.message || err2);
-          setLoading(false);
-        });
-        unsubscribe = unsubFallback;
+    let unsubPrimary: (() => void) | null = null;
+    let unsubFallback: (() => void) | null = null;
+
+    let primaryItems: ChangeRequest[] = [];
+    let fallbackItems: ChangeRequest[] = [];
+
+    const updateCombined = () => {
+      const allMap = new Map<string, ChangeRequest>();
+      // Fallback items first
+      fallbackItems.forEach(item => {
+        if (item.id) allMap.set(item.id, item);
       });
+      // Primary items overwrite
+      primaryItems.forEach(item => {
+        if (item.id) allMap.set(item.id, item);
+      });
+
+      const combined = Array.from(allMap.values()).sort((a, b) => {
+        const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (typeof a.createdAt === 'number' ? a.createdAt : 0);
+        const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (typeof b.createdAt === 'number' ? b.createdAt : 0);
+        return timeB - timeA;
+      });
+
+      setRequests(combined);
+      setLoading(false);
+    };
+
+    // 1. Try subscribing to dedicated 'change_requests' collection
+    try {
+      unsubPrimary = onSnapshot(
+        collection(db, 'change_requests'),
+        (snapshot) => {
+          primaryItems = snapshot.docs.map(docSnap => ({
+            id: docSnap.id,
+            collectionName: 'change_requests',
+            ...docSnap.data()
+          } as ChangeRequest));
+          updateCombined();
+        },
+        (error) => {
+          console.warn('change_requests lytter gav feil (prøver stats-samling):', error.message);
+          if (error.message && (error.message.includes('ERR_BLOCKED_BY_CLIENT') || error.message.includes('permission-denied'))) {
+            setIsAdBlockDetected(true);
+          }
+        }
+      );
     } catch (err: any) {
-      console.warn('Feil ved initialisering av lytte-funksjon:', err?.message || err);
+      console.warn('Kunne ikkje lytte på change_requests:', err);
+    }
+
+    // 2. Also subscribe to 'stats' collection (always open in rules on oivind-web)
+    try {
+      unsubFallback = onSnapshot(
+        collection(db, 'stats'),
+        (snapshot) => {
+          fallbackItems = snapshot.docs
+            .filter(d => d.data().docType === 'change_request' || d.data().isChangeRequest === true)
+            .map(docSnap => ({
+              id: docSnap.id,
+              collectionName: 'stats',
+              ...docSnap.data()
+            } as ChangeRequest));
+          updateCombined();
+        },
+        (error) => {
+          console.warn('stats lytter feila:', error.message);
+          if (error.message && error.message.includes('ERR_BLOCKED_BY_CLIENT')) {
+            setIsAdBlockDetected(true);
+          }
+          setLoading(false);
+        }
+      );
+    } catch (err: any) {
+      console.warn('Kunne ikkje lytte på stats:', err);
       setLoading(false);
     }
 
-    return () => unsubscribe();
+    return () => {
+      if (unsubPrimary) unsubPrimary();
+      if (unsubFallback) unsubFallback();
+    };
   }, []);
 
   const handleStartPickLocations = () => {
@@ -126,6 +177,25 @@ export default function ChangeRequestManager() {
     setFormLocations(prev => prev.filter(l => l.id !== id));
   };
 
+  // Generate formatted text for copy / email
+  const generateFormattedEmail = () => {
+    const locText = formLocations.map((l, i) => `  ${i + 1}. [${l.pagePath}] ${l.elementName || l.tag} ${l.textSnippet ? `(«${l.textSnippet}»)` : ''}`).join('\n');
+    return `Hei Kianosh,\n\nHer kjem eit endringsynskje / ny funksjon frå Øivind Solheim:\n\nTittel: ${formTitle || '(Ingen tittel)'}\nType: ${formType === 'feature' ? 'Ny funksjon' : 'Endring på innhald'}\nOmfang: ${formScope}\n${formWillingToPay ? `Tilbode betaling: ${formWillingToPay}\n` : ''}${formDeadline ? `Ynskt frist: ${formDeadline}\n` : ''}\nLokasjonar på nettsida:\n${locText || '  (Ingen spesifikke lokasjonar merka)'}\n\nSkildring:\n${formDescription || '(Inga skildring)'}\n\nMvh,\nØivind H. Solheim (oivindsolheim@gmail.com)`;
+  };
+
+  const handleCopyEmailText = () => {
+    const text = generateFormattedEmail();
+    navigator.clipboard.writeText(text);
+    setCopiedText(true);
+    setTimeout(() => setCopiedText(false), 2500);
+  };
+
+  const handleSendMailto = () => {
+    const subject = encodeURIComponent(`[Nettside ${formType === 'feature' ? 'Ny funksjon' : 'Endringsønske'}] ${formTitle || 'Førespurnad frå Øivind'}`);
+    const body = encodeURIComponent(generateFormattedEmail());
+    window.location.href = `mailto:kianoshsolheim@gmail.com?subject=${subject}&body=${body}`;
+  };
+
   const handleSubmitRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formTitle.trim()) {
@@ -134,27 +204,50 @@ export default function ChangeRequestManager() {
     }
 
     setIsSubmitting(true);
-    try {
-      const payload = {
-        title: formTitle.trim(),
-        type: formType,
-        scope: formType === 'feature' ? 'feature' : formScope,
-        description: formDescription.trim(),
-        selectedLocations: formLocations,
-        willingToPay: (formScope === 'medium' || formScope === 'large' || formType === 'feature') ? formWillingToPay.trim() : '',
-        deadline: (formScope === 'medium' || formScope === 'large' || formType === 'feature') ? formDeadline.trim() : '',
-        requestedByEmail: currentUserEmail || 'oivindsolheim@gmail.com',
-        requestedByName: user?.displayName || (isOivind ? 'Øivind H. Solheim' : 'Kianosh Solheim'),
-        assignedToEmail: 'kianoshsolheim@gmail.com',
-        status: 'pending' as RequestStatus,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      };
+    setSubmitError(null);
 
+    const payload: any = {
+      docType: 'change_request',
+      isChangeRequest: true,
+      title: formTitle.trim(),
+      type: formType,
+      scope: formType === 'feature' ? 'feature' : formScope,
+      description: formDescription.trim(),
+      selectedLocations: formLocations,
+      willingToPay: (formScope === 'medium' || formScope === 'large' || formType === 'feature') ? formWillingToPay.trim() : '',
+      deadline: (formScope === 'medium' || formScope === 'large' || formType === 'feature') ? formDeadline.trim() : '',
+      requestedByEmail: currentUserEmail || 'oivindsolheim@gmail.com',
+      requestedByName: user?.displayName || (isOivind ? 'Øivind H. Solheim' : 'Kianosh Solheim'),
+      assignedToEmail: 'kianoshsolheim@gmail.com',
+      status: 'pending' as RequestStatus,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    };
+
+    let saved = false;
+
+    // ATTEMPT 1: Primary collection 'change_requests'
+    try {
       await addDoc(collection(db, 'change_requests'), payload);
-      setSubmitSuccess(true);
+      saved = true;
+    } catch (err1: any) {
+      console.warn('Lagring i change_requests feila, prøver stats som fallback:', err1.message);
       
-      // Reset form
+      // ATTEMPT 2: Fallback collection 'stats' (open in remote rules)
+      try {
+        await addDoc(collection(db, 'stats'), payload);
+        saved = true;
+      } catch (err2: any) {
+        console.error('Lagring i stats feila også:', err2.message);
+        if (err2.message && err2.message.includes('ERR_BLOCKED_BY_CLIENT')) {
+          setIsAdBlockDetected(true);
+        }
+        setSubmitError(err2.message || 'Kunne ikkje nå Firestore-databasen.');
+      }
+    }
+
+    if (saved) {
+      setSubmitSuccess(true);
       setFormTitle('');
       setFormDescription('');
       setFormWillingToPay('');
@@ -164,42 +257,56 @@ export default function ChangeRequestManager() {
       setTimeout(() => {
         setSubmitSuccess(false);
         setActiveTab('list');
-      }, 1200);
-    } catch (err) {
-      console.error('Feil ved innsending av førespurnad:', err);
-      alert('Kunne ikkje sende inn førespurnaden. Prøv igjen.');
-    } finally {
-      setIsSubmitting(false);
+      }, 1500);
     }
+
+    setIsSubmitting(false);
   };
 
-  const handleUpdateStatus = async (requestId: string, newStatus: RequestStatus) => {
+  const handleUpdateStatus = async (requestItem: ChangeRequest, newStatus: RequestStatus) => {
+    if (!requestItem.id) return;
     setIsUpdatingStatus(true);
+    const colName = requestItem.collectionName || (requestItem.docType === 'change_request' ? 'stats' : 'change_requests');
+    
     try {
-      await updateDoc(doc(db, 'change_requests', requestId), {
+      await updateDoc(doc(db, colName, requestItem.id), {
         status: newStatus,
         updatedAt: serverTimestamp(),
       });
-      if (selectedRequest && selectedRequest.id === requestId) {
+      if (selectedRequest && selectedRequest.id === requestItem.id) {
         setSelectedRequest(prev => prev ? { ...prev, status: newStatus } : null);
       }
-    } catch (err) {
-      console.error('Feil ved oppdatering av status:', err);
-      alert('Kunne ikkje oppdatere status.');
+    } catch (err: any) {
+      // Fallback: try other collection if not found
+      const otherCol = colName === 'change_requests' ? 'stats' : 'change_requests';
+      try {
+        await updateDoc(doc(db, otherCol, requestItem.id), {
+          status: newStatus,
+          updatedAt: serverTimestamp(),
+        });
+        if (selectedRequest && selectedRequest.id === requestItem.id) {
+          setSelectedRequest(prev => prev ? { ...prev, status: newStatus } : null);
+        }
+      } catch (err2) {
+        console.error('Kunne ikkje oppdatere status:', err);
+        alert('Kunne ikkje oppdatere status.');
+      }
     } finally {
       setIsUpdatingStatus(false);
     }
   };
 
-  const handleSaveDeveloperNotes = async (requestId: string) => {
-    if (!replyText.trim()) return;
+  const handleSaveDeveloperNotes = async (requestItem: ChangeRequest) => {
+    if (!requestItem.id || !replyText.trim()) return;
     setIsUpdatingStatus(true);
+    const colName = requestItem.collectionName || (requestItem.docType === 'change_request' ? 'stats' : 'change_requests');
+    
     try {
-      await updateDoc(doc(db, 'change_requests', requestId), {
+      await updateDoc(doc(db, colName, requestItem.id), {
         developerNotes: replyText.trim(),
         updatedAt: serverTimestamp(),
       });
-      if (selectedRequest && selectedRequest.id === requestId) {
+      if (selectedRequest && selectedRequest.id === requestItem.id) {
         setSelectedRequest(prev => prev ? { ...prev, developerNotes: replyText.trim() } : null);
       }
       setReplyText('');
@@ -210,11 +317,12 @@ export default function ChangeRequestManager() {
     }
   };
 
-  const handleDeleteRequest = async (requestId: string) => {
-    if (!window.confirm('Er du sikker på at du vil slette denne førespurnaden?')) return;
+  const handleDeleteRequest = async (requestItem: ChangeRequest) => {
+    if (!requestItem.id || !window.confirm('Er du sikker på at du vil slette denne førespurnaden?')) return;
+    const colName = requestItem.collectionName || (requestItem.docType === 'change_request' ? 'stats' : 'change_requests');
     try {
-      await deleteDoc(doc(db, 'change_requests', requestId));
-      if (selectedRequest?.id === requestId) {
+      await deleteDoc(doc(db, colName, requestItem.id));
+      if (selectedRequest?.id === requestItem.id) {
         setSelectedRequest(null);
       }
     } catch (err) {
@@ -232,7 +340,25 @@ export default function ChangeRequestManager() {
   const isHighScope = formScope === 'medium' || formScope === 'large' || formType === 'feature';
 
   return (
-    <div className="space-y-8 font-sans">
+    <div className="space-y-6 font-sans">
+      
+      {/* AD BLOCKER / CLIENT NETWORK BLOCK WARNING */}
+      {isAdBlockDetected && (
+        <div className="p-4 bg-amber-500/10 border-2 border-amber-500/60 rounded text-stone-900 flex items-start gap-3 shadow-xs animate-in fade-in duration-300">
+          <ShieldAlert className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+          <div className="text-xs space-y-1">
+            <p className="font-semibold text-amber-950">
+              Tips: Annonseblokkerar (f.eks. uBlock / AdBlock / Brave Shields) kan blokkere tilkoplinga
+            </p>
+            <p className="text-stone-700 leading-relaxed">
+              Dersom nettlesaren din blokkerer førespurnader til Google Firestore (ERR_BLOCKED_BY_CLIENT), kan du enten:
+              <br />1. Slå av annonseblokkeringa for <strong>oivind.solheim.online</strong> og laste sida på nytt.
+              <br />2. Eller nytte knappen <strong>«Send som e-post til Kianosh»</strong> nedanfor for å sende ynsket direkte.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* HEADER SECTION */}
       <div className="bg-white border border-stone-200/90 rounded-sm p-6 sm:p-8 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -246,7 +372,7 @@ export default function ChangeRequestManager() {
             </h2>
             <p className="text-xs sm:text-sm text-stone-600 mt-1 max-w-2xl font-sans">
               Her kan <strong>oivindsolheim@gmail.com</strong> be om endringar, forbetringar eller nye funksjonar på nettsida av <strong>kianoshsolheim@gmail.com</strong>.
-              Bruk knappen <em>«Finn lokasjon»</em> for å peike direkte på element på nettsida.
+              Bruk knappen <em>«Finn lokasjon»</em> for å merke element direkte på nettsida.
             </p>
           </div>
 
@@ -292,15 +418,45 @@ export default function ChangeRequestManager() {
             <div className="p-4 mb-6 bg-emerald-50 border border-emerald-300 rounded text-emerald-900 flex items-center gap-3">
               <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
               <div>
-                <p className="text-sm font-semibold">Førespurnaden er sendt inn!</p>
-                <p className="text-xs text-emerald-700">Kianosh kan no sjå endringsønsket ditt og dei merka elementa.</p>
+                <p className="text-sm font-semibold">Førespurnaden er sendt inn og lagra!</p>
+                <p className="text-xs text-emerald-700">Kianosh kan no sjå endringsønsket ditt og dei merka elementa i lista.</p>
+              </div>
+            </div>
+          )}
+
+          {submitError && (
+            <div className="p-4 mb-6 bg-red-50 border border-red-300 rounded text-red-900 space-y-2">
+              <div className="flex items-center gap-2 font-semibold text-xs">
+                <AlertCircle className="w-4 h-4 text-red-600" />
+                <span>Kunne ikkje lagre i databasen: {submitError}</span>
+              </div>
+              <p className="text-xs text-stone-600 leading-relaxed">
+                Nettlesaren kan ha blokkert tilkoplinga. Du kan likevel sende førespurnaden direkte til Kianosh som e-post med eitt klikk:
+              </p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={handleSendMailto}
+                  className="px-3 py-1.5 bg-brand-dark hover:bg-black text-white text-xs font-semibold rounded flex items-center gap-1.5"
+                >
+                  <Mail className="w-3.5 h-3.5" />
+                  <span>Send som e-post til Kianosh</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCopyEmailText}
+                  className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-semibold rounded flex items-center gap-1.5"
+                >
+                  {copiedText ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedText ? 'Kopiert!' : 'Kopier tekst'}</span>
+                </button>
               </div>
             </div>
           )}
 
           <form onSubmit={handleSubmitRequest} className="space-y-6">
             
-            {/* TYPE VELGER: ENDRING ELLER NY FUNKSJON */}
+            {/* 1. TYPE VELGER: ENDRING ELLER NY FUNKSJON */}
             <div>
               <label className="block text-xs font-semibold uppercase tracking-wider text-brand-dark mb-2">
                 1. Kva type førespurnad er dette?
@@ -348,7 +504,7 @@ export default function ChangeRequestManager() {
               </div>
             </div>
 
-            {/* OMFANG / STØRRELSE (FOR ENDRING) */}
+            {/* 2. OMFANG / STØRRELSE (FOR ENDRING) */}
             {formType === 'change' && (
               <div>
                 <label className="block text-xs font-semibold uppercase tracking-wider text-brand-dark mb-2">
@@ -440,7 +596,7 @@ export default function ChangeRequestManager() {
                         value={formWillingToPay}
                         onChange={(e) => setFormWillingToPay(e.target.value)}
                         placeholder="F.eks. 1 500 kr (eller avtales)"
-                        className="w-full p-2.5 text-xs bg-white border border-amber-300 rounded focus:border-brand-dark outline-none"
+                        className="w-full p-2.5 text-xs bg-white border border-amber-300 rounded focus:border-brand-dark outline-none font-medium"
                       />
                     </div>
                     <div className="flex flex-wrap gap-1.5 pt-1">
@@ -467,8 +623,8 @@ export default function ChangeRequestManager() {
                         type="text"
                         value={formDeadline}
                         onChange={(e) => setFormDeadline(e.target.value)}
-                        placeholder="F.eks. Innan 1 veke / spesifikk dato"
-                        className="w-full p-2.5 text-xs bg-white border border-amber-300 rounded focus:border-brand-dark outline-none"
+                        placeholder="F.eks. Innan 1 veke / dato"
+                        className="w-full p-2.5 text-xs bg-white border border-amber-300 rounded focus:border-brand-dark outline-none font-medium"
                       />
                     </div>
                     <div className="flex flex-wrap gap-1.5 pt-1">
@@ -576,7 +732,7 @@ export default function ChangeRequestManager() {
                   required
                   value={formTitle}
                   onChange={(e) => setFormTitle(e.target.value)}
-                  placeholder="F.eks. «Gjer det mogleg å skjule omtaler» eller «Ny bestillingsknapp»"
+                  placeholder="F.eks. «Endre bilde på om-meg sida» eller «Ny bestillingsknapp»"
                   className="w-full p-3 text-sm bg-white border border-stone-300 rounded focus:border-brand-dark outline-none font-serif"
                 />
               </div>
@@ -595,20 +751,32 @@ export default function ChangeRequestManager() {
               </div>
             </div>
 
-            {/* SUBMIT BUTTON */}
-            <div className="flex items-center justify-between pt-4 border-t border-stone-100">
-              <span className="text-xs text-stone-500">
-                Førespurnaden blir lagra og sendt direkte til <strong>kianoshsolheim@gmail.com</strong>
-              </span>
+            {/* SUBMIT BUTTON + DIRECT EMAIL FALLBACK */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-4 border-t border-stone-100">
+              <div className="text-xs text-stone-500">
+                Førespurnaden blir lagra for <strong>kianoshsolheim@gmail.com</strong>
+              </div>
 
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="px-6 py-3 bg-brand-dark hover:bg-black text-white text-xs font-semibold tracking-widest uppercase rounded transition-colors flex items-center gap-2 shadow-md disabled:opacity-50"
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span>{isSubmitting ? 'Sender inn...' : 'Send førespurnad'}</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSendMailto}
+                  title="Send direkte som e-post til Kianosh dersom du føretrekkjer det"
+                  className="px-4 py-3 bg-stone-100 hover:bg-stone-200 text-stone-800 text-xs font-semibold uppercase tracking-wider rounded transition-colors flex items-center gap-1.5"
+                >
+                  <Mail className="w-3.5 h-3.5 text-stone-600" />
+                  <span>Send på e-post</span>
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="px-6 py-3 bg-brand-dark hover:bg-black text-white text-xs font-semibold tracking-widest uppercase rounded transition-colors flex items-center gap-2 shadow-md disabled:opacity-50"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>{isSubmitting ? 'Sender inn...' : 'Send førespurnad'}</span>
+                </button>
+              </div>
             </div>
           </form>
         </div>
@@ -930,7 +1098,7 @@ export default function ChangeRequestManager() {
                     <button
                       type="button"
                       disabled={isUpdatingStatus || !replyText.trim()}
-                      onClick={() => handleSaveDeveloperNotes(selectedRequest.id!)}
+                      onClick={() => handleSaveDeveloperNotes(selectedRequest)}
                       className="px-3 py-2 bg-stone-800 hover:bg-black text-white text-xs font-semibold rounded disabled:opacity-50"
                     >
                       Lagre
@@ -945,7 +1113,7 @@ export default function ChangeRequestManager() {
                   </span>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <button
-                      onClick={() => handleUpdateStatus(selectedRequest.id!, 'pending')}
+                      onClick={() => handleUpdateStatus(selectedRequest, 'pending')}
                       className={`p-2 text-[11px] font-semibold rounded border text-center transition-colors ${
                         selectedRequest.status === 'pending'
                           ? 'bg-amber-100 border-amber-300 text-amber-900'
@@ -955,7 +1123,7 @@ export default function ChangeRequestManager() {
                       Ventar
                     </button>
                     <button
-                      onClick={() => handleUpdateStatus(selectedRequest.id!, 'in_progress')}
+                      onClick={() => handleUpdateStatus(selectedRequest, 'in_progress')}
                       className={`p-2 text-[11px] font-semibold rounded border text-center transition-colors ${
                         selectedRequest.status === 'in_progress'
                           ? 'bg-blue-100 border-blue-300 text-blue-900'
@@ -965,7 +1133,7 @@ export default function ChangeRequestManager() {
                       I arbeid
                     </button>
                     <button
-                      onClick={() => handleUpdateStatus(selectedRequest.id!, 'completed')}
+                      onClick={() => handleUpdateStatus(selectedRequest, 'completed')}
                       className={`p-2 text-[11px] font-semibold rounded border text-center transition-colors ${
                         selectedRequest.status === 'completed'
                           ? 'bg-emerald-100 border-emerald-300 text-emerald-900'
@@ -975,7 +1143,7 @@ export default function ChangeRequestManager() {
                       Fullført
                     </button>
                     <button
-                      onClick={() => handleUpdateStatus(selectedRequest.id!, 'declined')}
+                      onClick={() => handleUpdateStatus(selectedRequest, 'declined')}
                       className={`p-2 text-[11px] font-semibold rounded border text-center transition-colors ${
                         selectedRequest.status === 'declined'
                           ? 'bg-red-100 border-red-300 text-red-900'
@@ -990,7 +1158,7 @@ export default function ChangeRequestManager() {
                 {/* DELETE ACTION */}
                 <div className="pt-2 flex justify-end">
                   <button
-                    onClick={() => handleDeleteRequest(selectedRequest.id!)}
+                    onClick={() => handleDeleteRequest(selectedRequest)}
                     className="text-xs text-red-600 hover:text-red-800 flex items-center gap-1 font-semibold"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -1010,6 +1178,37 @@ export default function ChangeRequestManager() {
 
         </div>
       )}
+
+      {/* EXPANDABLE FIREBASE CONSOLE RULES INSTRUCTIONS FOR KIANOSH */}
+      <div className="mt-8 pt-4 border-t border-stone-200/80">
+        <button
+          type="button"
+          onClick={() => setShowRulesInfo(!showRulesInfo)}
+          className="text-xs text-stone-500 hover:text-brand-dark flex items-center gap-1.5 font-medium transition-colors"
+        >
+          <Info className="w-3.5 h-3.5 text-stone-400" />
+          <span>Informasjon om Firebase-rettigheiter for «oivind-web»</span>
+          <ChevronRight className={`w-3.5 h-3.5 transition-transform ${showRulesInfo ? 'rotate-90' : ''}`} />
+        </button>
+
+        {showRulesInfo && (
+          <div className="mt-3 p-4 bg-stone-50 border border-stone-200 rounded text-xs space-y-2 text-stone-700 leading-relaxed font-mono">
+            <p className="font-sans font-semibold text-stone-900">
+              For å gje full tilgang til den dedikerte <code className="bg-stone-200 px-1 py-0.5 rounded text-[11px]">change_requests</code>-samlinga på oivind-web i Firebase Console:
+            </p>
+            <pre className="bg-stone-900 text-stone-100 p-3 rounded text-[11px] overflow-x-auto">
+{`// Legg til dette i firestore.rules på https://console.firebase.google.com/project/oivind-web/firestore/rules:
+match /change_requests/{requestId} {
+  allow read, write: if true;
+}`}
+            </pre>
+            <p className="font-sans text-[11px] text-stone-500">
+              Merk: Appen nyttar no også automatisk reservelagring slik at førespurnader blir lagra og henta uansett!
+            </p>
+          </div>
+        )}
+      </div>
+
     </div>
   );
 }

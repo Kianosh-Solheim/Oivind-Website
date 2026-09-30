@@ -66,6 +66,8 @@ export interface ChangeRequest {
   assignedToEmail: string;    // F.eks. "kianoshsolheim@gmail.com"
   status: RequestStatus;      // 'pending' | 'in_progress' | 'completed' | 'declined'
   developerNotes?: string;    // Svar/kommentarar frå Kianosh
+  collectionName?: 'change_requests' | 'stats';
+  docType?: string;
   createdAt?: any;
   updatedAt?: any;
 }
