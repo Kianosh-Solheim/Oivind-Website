@@ -153,6 +153,12 @@ export default function Admin() {
       if (tabParam === 'books' || tabParam === 'promo' || tabParam === 'files' || tabParam === 'articles' || tabParam === 'diary' || tabParam === 'about' || tabParam === 'photos' || tabParam === 'orders' || tabParam === 'backup' || tabParam === 'requests') {
         setDashboardTab(tabParam as any);
       }
+
+      const targetBookParam = params.get('targetBook');
+      if (targetBookParam) {
+        setDashboardTab('books');
+        setPromoTargetBookId(targetBookParam);
+      }
       
       if (params.get('compose') === 'true') {
         const lang = params.get('lang') || 'no';

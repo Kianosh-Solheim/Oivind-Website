@@ -9,9 +9,11 @@ import { Book } from '../types';
 import { slugify, getBuyLinkType } from '../lib/utils';
 import heroImg from '../assets/bilde_framside.jpeg';
 import { useLanguage } from '../context/LanguageContext';
+import { useAuth } from '../lib/AuthContext';
 
 export default function Home() {
   const { t, language } = useLanguage();
+  const { isAdmin } = useAuth();
   const [heroBook, setHeroBook] = useState<Book | null>(null);
 
   useEffect(() => {
@@ -150,6 +152,17 @@ export default function Home() {
                     <Truck className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-400" />
                     <span>{shippingText}</span>
                   </span>
+                )}
+
+                {isAdmin && (
+                  <Link
+                    to={`/admin?tab=books&targetBook=${heroBook.id}`}
+                    className="inline-flex items-center gap-1.5 px-3 py-0.5 sm:py-1 bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-[10px] sm:text-xs uppercase tracking-wider rounded-full shadow-md transition-colors"
+                    title="Rediger denne fokus-visinga direkte (WYSIWYG)"
+                  >
+                    <Sparkles className="w-3 h-3 text-stone-950" />
+                    <span>Rediger fokus (WYSIWYG)</span>
+                  </Link>
                 )}
               </motion.div>
 

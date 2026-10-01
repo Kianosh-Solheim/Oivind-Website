@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { 
   ShoppingBag, 
   Check, 
@@ -13,20 +13,24 @@ import {
   FileText, 
   Hash, 
   ChevronDown,
-  AlertCircle
+  AlertCircle,
+  Sparkles,
+  Edit3
 } from 'lucide-react';
 import { db } from '../lib/firebase';
-import { collection, query, orderBy, getDocs, doc, getDoc, getDocFromCache } from 'firebase/firestore';
-import { getCachedDocs } from '../lib/dbCache';
+import { collection, query, orderBy, getDocs, doc, getDoc, getDocFromCache, writeBatch, serverTimestamp } from 'firebase/firestore';
+import { getCachedDocs, invalidateCache } from '../lib/dbCache';
 import { motion, AnimatePresence } from 'motion/react';
 import { slugify, getBuyLinkType } from '../lib/utils';
 import { Book, AboutSettings } from '../types';
 import { useAuth } from '../lib/AuthContext';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import BookWysiwygEditor from '../components/BookWysiwygEditor';
 
 export default function BokSalg() {
   const { slug } = useParams<{ slug?: string }>();
+  const navigate = useNavigate();
   const { isAdmin } = useAuth();
   const [book, setBook] = useState<Book | null>(null);
   const [, setAllBooks] = useState<Book[]>([]);
@@ -34,6 +38,7 @@ export default function BokSalg() {
   const [loading, setLoading] = useState(true);
   const [showStickyBar, setShowStickyBar] = useState(false);
   const [readExcerptOpen, setReadExcerptOpen] = useState(false);
+  const [isWysiwygOpen, setIsWysiwygOpen] = useState(false);
 
   // Fetch book based on slug or load all for /salg showcase
   useEffect(() => {
@@ -178,9 +183,49 @@ export default function BokSalg() {
     }
   ];
 
+  const handleWysiwygSave = async (updatedFields: Partial<Book>) => {
+    if (!book || !book.id) return;
+    const batch = writeBatch(db);
+    batch.update(doc(db, 'books', book.id), {
+      ...updatedFields,
+      updatedAt: serverTimestamp(),
+    });
+    await batch.commit();
+    invalidateCache();
+    setBook(prev => prev ? { ...prev, ...updatedFields } : null);
+  };
+
   return (
     <div className="bg-[#FDFCF7] text-brand-dark min-h-screen selection:bg-brand-accent/20">
       
+      {/* ADMIN WYSIWYG QUICK BAR */}
+      {isAdmin && book && (
+        <div className="bg-amber-500 text-stone-950 px-6 py-2.5 text-xs font-semibold flex flex-wrap items-center justify-between gap-3 shadow-md sticky top-0 z-50">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-stone-950 shrink-0" />
+            <span>Administrator-modus: Du ser denne boka slik lesarane gjer.</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsWysiwygOpen(true)}
+            className="px-3.5 py-1.5 bg-stone-950 hover:bg-black text-amber-300 font-bold text-xs uppercase tracking-wider rounded transition-colors flex items-center gap-1.5 shadow-sm"
+          >
+            <Edit3 className="w-3.5 h-3.5" />
+            <span>Rediger boka visuelt (WYSIWYG)</span>
+          </button>
+        </div>
+      )}
+
+      {/* RENDER WYSIWYG EDITOR MODAL */}
+      {isAdmin && isWysiwygOpen && book && (
+        <BookWysiwygEditor
+          book={book}
+          onSave={handleWysiwygSave}
+          onClose={() => setIsWysiwygOpen(false)}
+          onSwitchToForm={() => navigate(`/admin?tab=books&targetBook=${book.id}`)}
+        />
+      )}
+
       {/* TOP NAVIGATION / BREADCRUMB */}
       <nav className="border-b border-stone-200/70 bg-white/80 backdrop-blur-sm sticky top-0 z-40 px-6 md:px-12 py-3.5">
         <div className="max-w-6xl mx-auto flex items-center justify-between">

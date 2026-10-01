@@ -26,6 +26,7 @@ import { slugify, getBuyLinkType } from '../lib/utils';
 import { Book, BookQuote } from '../types';
 import ImagePickerModal from './ImagePickerModal';
 import AnalyticsModal from './AnalyticsModal';
+import BookWysiwygEditor from './BookWysiwygEditor';
 
 interface BookPromoManagerProps {
   books: Book[];
@@ -42,6 +43,7 @@ export default function BookPromoManager({
   pageStats = {}
 }: BookPromoManagerProps & { pageStats?: Record<string, number> }) {
   const [editingBook, setEditingBook] = useState<Book | null>(null);
+  const [editMode, setEditMode] = useState<'form' | 'wysiwyg'>('wysiwyg');
   const [isCreating, setIsCreating] = useState(false);
   const [deletingBook, setDeletingBook] = useState<Book | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -263,6 +265,29 @@ export default function BookPromoManager({
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const handleWysiwygSave = async (updatedFields: Partial<Book>) => {
+    if (!editingBook || !editingBook.id) return;
+    
+    const batch = writeBatch(db);
+    if (updatedFields.isHeroFocus) {
+      books.forEach((b) => {
+        if (b.id && b.id !== editingBook.id && b.isHeroFocus) {
+          batch.update(doc(db, 'books', b.id), { isHeroFocus: false, updatedAt: serverTimestamp() });
+        }
+      });
+    }
+
+    batch.update(doc(db, 'books', editingBook.id), {
+      ...updatedFields,
+      updatedAt: serverTimestamp(),
+    });
+
+    await batch.commit();
+    invalidateCache();
+    onDataChanged();
+    setEditingBook(prev => prev ? { ...prev, ...updatedFields } : null);
   };
 
   const handleSaveBook = async (e: React.FormEvent) => {
@@ -649,10 +674,26 @@ export default function BookPromoManager({
               <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-gray-100">
                 <button
                   type="button"
-                  onClick={() => handleStartEdit(b)}
-                  className="flex-1 py-2.5 px-3 bg-brand-dark hover:bg-black text-white text-xs font-semibold tracking-wider uppercase transition-colors rounded-sm flex items-center justify-center gap-1.5"
+                  onClick={() => {
+                    handleStartEdit(b);
+                    setEditMode('wysiwyg');
+                  }}
+                  className="flex-1 py-2.5 px-3 bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold text-xs tracking-wider uppercase transition-colors rounded-sm flex items-center justify-center gap-1.5 shadow-xs"
+                  title="Visuell WYSIWYG-redigering (Bok i fokus & Landingsside)"
                 >
-                  <Edit3 className="w-3.5 h-3.5" /> Rediger bok
+                  <Sparkles className="w-3.5 h-3.5 text-stone-950" /> Visuell (WYSIWYG)
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleStartEdit(b);
+                    setEditMode('form');
+                  }}
+                  className="py-2.5 px-3 bg-brand-dark hover:bg-black text-white text-xs font-semibold tracking-wider uppercase transition-colors rounded-sm flex items-center justify-center gap-1"
+                  title="Klassisk skjemaredigering"
+                >
+                  <Edit3 className="w-3.5 h-3.5" /> Skjema
                 </button>
 
                 <a
@@ -696,17 +737,39 @@ export default function BookPromoManager({
         )}
       </div>
 
-      {/* EDIT / CREATE BOOK MODAL */}
-      {(editingBook || isCreating) && (
+      {/* VISUAL WYSIWYG EDITOR MODAL */}
+      {editingBook && editMode === 'wysiwyg' && (
+        <BookWysiwygEditor
+          book={editingBook}
+          onSave={handleWysiwygSave}
+          onClose={() => setEditingBook(null)}
+          onSwitchToForm={() => setEditMode('form')}
+        />
+      )}
+
+      {/* EDIT / CREATE BOOK MODAL (FORM VIEW) */}
+      {(isCreating || (editingBook && editMode === 'form')) && (
         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white border border-gray-200 rounded-sm w-full max-w-4xl shadow-2xl overflow-hidden my-8 max-h-[92vh] flex flex-col">
             
             {/* MODAL HEADER */}
             <div className="p-5 md:p-6 bg-stone-50 border-b border-gray-200 flex items-center justify-between shrink-0">
               <div>
-                <span className="text-[10px] font-sans uppercase tracking-widest text-brand-accent font-semibold block mb-1">
-                  {isCreating ? 'Opprett ny bok' : 'Rediger bok & salgsside'}
-                </span>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-[10px] font-sans uppercase tracking-widest text-brand-accent font-semibold block">
+                    {isCreating ? 'Opprett ny bok' : 'Rediger bok & salgsside'}
+                  </span>
+                  {editingBook && (
+                    <button
+                      type="button"
+                      onClick={() => setEditMode('wysiwyg')}
+                      className="px-2.5 py-0.5 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-950 font-bold text-[10px] uppercase tracking-wider rounded transition-colors flex items-center gap-1 shadow-xs"
+                    >
+                      <Sparkles className="w-3 h-3 text-amber-600" />
+                      <span>Byt til Visuell WYSIWYG (Fokus & Salside)</span>
+                    </button>
+                  )}
+                </div>
                 <h3 className="text-xl md:text-2xl font-serif text-brand-dark">
                   {isCreating ? 'Ny bok' : (formTitle || editingBook?.title || 'Rediger bok')}
                 </h3>
