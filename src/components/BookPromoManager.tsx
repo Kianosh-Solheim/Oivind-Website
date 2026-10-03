@@ -279,15 +279,20 @@ export default function BookPromoManager({
       });
     }
 
-    batch.update(doc(db, 'books', editingBook.id), {
-      ...updatedFields,
-      updatedAt: serverTimestamp(),
-    });
+    const sanitizedPayload: Record<string, any> = {};
+    for (const [key, val] of Object.entries(updatedFields)) {
+      if (val !== undefined) {
+        sanitizedPayload[key] = val;
+      }
+    }
+    sanitizedPayload.updatedAt = serverTimestamp();
+
+    batch.update(doc(db, 'books', editingBook.id), sanitizedPayload);
 
     await batch.commit();
     invalidateCache();
     onDataChanged();
-    setEditingBook(prev => prev ? { ...prev, ...updatedFields } : null);
+    setEditingBook(prev => prev ? { ...prev, ...sanitizedPayload } : null);
   };
 
   const handleSaveBook = async (e: React.FormEvent) => {

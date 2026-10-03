@@ -88,13 +88,13 @@ function InlineEdit({
 
   if (isEditing) {
     return (
-      <div className="relative inline-block w-full my-1 group/edit z-30">
+      <span className="relative inline-block w-full my-1 group/edit z-30">
         {label && (
           <span className="block text-[10px] font-sans uppercase font-bold tracking-widest text-amber-500 mb-1">
             Redigerer: {label}
           </span>
         )}
-        <div className="relative flex items-center">
+        <span className="relative flex items-center">
           {as === 'textarea' ? (
             <textarea
               autoFocus
@@ -126,16 +126,16 @@ function InlineEdit({
           >
             <Check className="w-3.5 h-3.5" />
           </button>
-        </div>
+        </span>
         <span className="text-[10px] text-stone-400 font-sans mt-0.5 block">
           Trykk Enter eller klikk utanfor for å stadfeste (Esc for å avbryte)
         </span>
-      </div>
+      </span>
     );
   }
 
   return (
-    <div
+    <span
       onClick={() => setIsEditing(true)}
       className={`group/field relative cursor-pointer rounded transition-all duration-150 inline-block hover:outline hover:outline-2 hover:outline-amber-400/80 hover:bg-amber-400/10 p-1 -m-1 ${className}`}
       title="Klikk for å redigere denne teksten direkte"
@@ -147,7 +147,7 @@ function InlineEdit({
         <Edit2 className="w-2.5 h-2.5" />
         <span>{label ? `Rediger ${label}` : 'Klikk for å redigere'}</span>
       </span>
-    </div>
+    </span>
   );
 }
 
@@ -212,7 +212,7 @@ export default function BookWysiwygEditor({
       await onSave({
         title: title.trim(),
         publishedYear: Number(publishedYear) || new Date().getFullYear(),
-        pageCount: pageCount ? Number(pageCount) : undefined,
+        pageCount: pageCount ? Number(pageCount) : (null as any),
         price: Number(price) || 299,
         coverImageUrl: coverUrl,
         isHeroFocus: isHeroFocus,
@@ -226,7 +226,7 @@ export default function BookWysiwygEditor({
         promoDescription: description.trim(),
         promoExcerpt: excerpt.trim(),
         authorNote: authorNote.trim(),
-        promoSpecialPrice: specialPrice ? Number(specialPrice) : undefined,
+        promoSpecialPrice: specialPrice ? Number(specialPrice) : (null as any),
         promoShippingText: shippingText.trim(),
         promoHighlights: highlights.filter(h => h.trim().length > 0),
         promoQuotes: quotes.filter(q => q.quote && q.quote.trim().length > 0),
@@ -538,7 +538,7 @@ export default function BookWysiwygEditor({
                   {/* Featured Quote under Cover */}
                   {quotes.length > 0 && quotes[0]?.quote && (
                     <div className="mt-4 text-center max-w-xs px-2">
-                      <p className="text-xs font-serif italic text-stone-300">
+                      <div className="text-xs font-serif italic text-stone-300">
                         «
                         <InlineEdit
                           value={quotes[0].quote}
@@ -548,8 +548,8 @@ export default function BookWysiwygEditor({
                           className="font-serif italic"
                         />
                         »
-                      </p>
-                      <p className="text-[11px] font-sans tracking-wider uppercase text-amber-400/90 mt-1">
+                      </div>
+                      <div className="text-[11px] font-sans tracking-wider uppercase text-amber-400/90 mt-1">
                         — 
                         <InlineEdit
                           value={quotes[0].author || 'Lesar'}
@@ -558,7 +558,7 @@ export default function BookWysiwygEditor({
                           label="Omtale-forfattar"
                           className="font-sans uppercase text-[10px]"
                         />
-                      </p>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -923,7 +923,7 @@ export default function BookWysiwygEditor({
                               </button>
                             </div>
 
-                            <p className="font-serif text-stone-800 text-base italic leading-relaxed mb-4">
+                            <div className="font-serif text-stone-800 text-base italic leading-relaxed mb-4">
                               <InlineEdit
                                 value={q.quote}
                                 onChange={(val) => handleUpdateQuote(idx, 'quote', val)}
@@ -933,7 +933,7 @@ export default function BookWysiwygEditor({
                                 label={`Omtalesitat ${idx + 1}`}
                                 className="font-serif text-base italic"
                               />
-                            </p>
+                            </div>
                           </div>
 
                           <div className="pt-3 border-t border-stone-200/50 flex items-center justify-between text-xs">

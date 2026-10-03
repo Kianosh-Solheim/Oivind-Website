@@ -186,13 +186,18 @@ export default function BokSalg() {
   const handleWysiwygSave = async (updatedFields: Partial<Book>) => {
     if (!book || !book.id) return;
     const batch = writeBatch(db);
-    batch.update(doc(db, 'books', book.id), {
-      ...updatedFields,
-      updatedAt: serverTimestamp(),
-    });
+    const sanitizedPayload: Record<string, any> = {};
+    for (const [key, val] of Object.entries(updatedFields)) {
+      if (val !== undefined) {
+        sanitizedPayload[key] = val;
+      }
+    }
+    sanitizedPayload.updatedAt = serverTimestamp();
+
+    batch.update(doc(db, 'books', book.id), sanitizedPayload);
     await batch.commit();
     invalidateCache();
-    setBook(prev => prev ? { ...prev, ...updatedFields } : null);
+    setBook(prev => prev ? { ...prev, ...sanitizedPayload } : null);
   };
 
   return (
