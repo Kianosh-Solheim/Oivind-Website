@@ -1318,19 +1318,12 @@ export default function Gratishefte() {
                 </button>
               </div>
 
-              {/* Book Callout inside Hero Grid: Liked the questions or want to read more? Buy the book */}
+              {/* Book Callout inside Hero Grid */}
               <div className="mt-4 pt-5 border-t border-white/15 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white/[0.04] p-4 sm:p-5 rounded-md border border-white/10">
-                <div className="space-y-1">
-                  <div className="text-[11px] font-sans font-bold uppercase tracking-widest text-[#B58442]">
-                    {currentLang === 'en'
-                      ? 'BASED ON THE BOOK THINK FOR YOURSELF!'
-                      : 'UTARBEIDD FRÅ BOKA TENK SJØLV!'}
-                  </div>
-                  <p className="text-sm text-[#E4ECF2] font-sans leading-snug">
-                    {currentLang === 'en'
-                      ? 'Liked the questions or want to read more? Get the full book.'
-                      : 'Likte du spørsmåla eller vil du lese meir? Kjøp heile boka.'}
-                  </p>
+                <div className="text-xs font-sans font-bold uppercase tracking-widest text-[#B58442]">
+                  {currentLang === 'en'
+                    ? 'BASED ON THE BOOK THINK FOR YOURSELF!'
+                    : 'UTARBEIDD FRÅ BOKA TENK SJØLV!'}
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2.5 shrink-0">

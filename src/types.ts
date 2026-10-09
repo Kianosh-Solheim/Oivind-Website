@@ -51,7 +51,9 @@ export interface ElementLocation {
 
 export type RequestScope = 'small' | 'medium' | 'large' | 'feature';
 export type RequestType = 'change' | 'feature';
-export type RequestStatus = 'pending' | 'in_progress' | 'completed' | 'declined';
+export type RequestStatus = 'pending' | 'accepted' | 'in_progress' | 'completed' | 'declined';
+export type PriceAdjustmentType = 'agreed' | 'lower' | 'higher';
+export type PaymentStatus = 'unpaid' | 'invoiced' | 'paid' | 'not_applicable';
 
 export interface ChangeRequest {
   id?: string;
@@ -65,8 +67,14 @@ export interface ChangeRequest {
   requestedByEmail: string;   // F.eks. "oivindsolheim@gmail.com"
   requestedByName?: string;
   assignedToEmail: string;    // F.eks. "kianoshsolheim@gmail.com"
-  status: RequestStatus;      // 'pending' | 'in_progress' | 'completed' | 'declined'
+  status: RequestStatus;      // 'pending' | 'accepted' | 'in_progress' | 'completed' | 'declined'
   developerNotes?: string;    // Svar/kommentarar frå Kianosh
+  adjustedPrice?: string;     // Justert pris frå Kianosh (f.eks. "2 200 kr" eller "800 kr")
+  priceAdjustmentType?: PriceAdjustmentType; // 'agreed' | 'lower' | 'higher'
+  priceNote?: string;         // Merknad om kvifor prisen bør vere lågare eller høgare basert på arbeidet
+  paymentStatus?: PaymentStatus; // 'unpaid' | 'invoiced' | 'paid' | 'not_applicable'
+  paidAmount?: string;        // Registrert betalt beløp
+  paidAt?: any;
   collectionName?: 'change_requests' | 'stats';
   docType?: string;
   createdAt?: any;

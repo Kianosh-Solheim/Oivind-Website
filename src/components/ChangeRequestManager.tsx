@@ -14,7 +14,7 @@ import {
 import { db } from '../lib/firebase';
 import { useAuth } from '../lib/AuthContext';
 import { useElementPicker } from '../context/ElementPickerContext';
-import { ChangeRequest, ElementLocation, RequestScope, RequestType, RequestStatus } from '../types';
+import { ChangeRequest, ElementLocation, RequestScope, RequestType, RequestStatus, PriceAdjustmentType, PaymentStatus } from '../types';
 import { 
   MapPin, 
   Plus, 
@@ -38,7 +38,11 @@ import {
   Mail,
   Copy,
   ShieldAlert,
-  Info
+  Info,
+  CreditCard,
+  TrendingUp,
+  TrendingDown,
+  Equal
 } from 'lucide-react';
 
 export default function ChangeRequestManager() {
@@ -50,6 +54,7 @@ export default function ChangeRequestManager() {
   const [activeTab, setActiveTab] = useState<'list' | 'new'>('list');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterScope, setFilterScope] = useState<string>('all');
+  const [filterPayment, setFilterPayment] = useState<string>('all');
   const [selectedRequest, setSelectedRequest] = useState<ChangeRequest | null>(null);
   const [isAdBlockDetected, setIsAdBlockDetected] = useState(false);
   const [showRulesInfo, setShowRulesInfo] = useState(false);
@@ -71,9 +76,30 @@ export default function ChangeRequestManager() {
   const [replyText, setReplyText] = useState('');
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
 
+  // Price assessment & Acceptance state for Kianosh
+  const [priceAdjType, setPriceAdjType] = useState<PriceAdjustmentType>('agreed');
+  const [adjustedPriceInput, setAdjustedPriceInput] = useState('');
+  const [priceNoteInput, setPriceNoteInput] = useState('');
+  const [priceSavedSuccess, setPriceSavedSuccess] = useState(false);
+
+  // Delete confirmation state
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
   const currentUserEmail = user?.email?.toLowerCase().trim() || '';
   const isKianosh = currentUserEmail === 'kianoshsolheim@gmail.com';
   const isOivind = currentUserEmail === 'oivindsolheim@gmail.com';
+
+  // Sync price and developer notes inputs when selecting a request
+  useEffect(() => {
+    if (selectedRequest) {
+      setPriceAdjType(selectedRequest.priceAdjustmentType || 'agreed');
+      setAdjustedPriceInput(selectedRequest.adjustedPrice || selectedRequest.willingToPay || '');
+      setPriceNoteInput(selectedRequest.priceNote || '');
+      setReplyText(selectedRequest.developerNotes || '');
+      setConfirmDeleteId(null);
+      setPriceSavedSuccess(false);
+    }
+  }, [selectedRequest?.id]);
 
   // Synchronize picked elements from ElementPickerContext
   useEffect(() => {
@@ -199,12 +225,14 @@ export default function ChangeRequestManager() {
   const handleSubmitRequest = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formTitle.trim()) {
-      alert('Ver venleg og fyll inn kva endringa eller funksjonen gjeld.');
+      setSubmitError('Ver venleg og fyll inn kva endringa eller funksjonen gjeld.');
       return;
     }
 
     setIsSubmitting(true);
     setSubmitError(null);
+
+    const isPayable = formScope === 'medium' || formScope === 'large' || formType === 'feature';
 
     const payload: any = {
       docType: 'change_request',
@@ -214,8 +242,9 @@ export default function ChangeRequestManager() {
       scope: formType === 'feature' ? 'feature' : formScope,
       description: formDescription.trim(),
       selectedLocations: formLocations,
-      willingToPay: (formScope === 'medium' || formScope === 'large' || formType === 'feature') ? formWillingToPay.trim() : '',
-      deadline: (formScope === 'medium' || formScope === 'large' || formType === 'feature') ? formDeadline.trim() : '',
+      willingToPay: isPayable ? formWillingToPay.trim() : '',
+      deadline: isPayable ? formDeadline.trim() : '',
+      paymentStatus: (isPayable ? 'unpaid' : 'not_applicable') as PaymentStatus,
       requestedByEmail: currentUserEmail || 'oivindsolheim@gmail.com',
       requestedByName: user?.displayName || (isOivind ? 'Øivind H. Solheim' : 'Kianosh Solheim'),
       assignedToEmail: 'kianoshsolheim@gmail.com',
@@ -263,77 +292,119 @@ export default function ChangeRequestManager() {
     setIsSubmitting(false);
   };
 
+  // Helper to update a request across primary and fallback collections
+  const updateRequestDoc = async (requestItem: ChangeRequest, updates: Record<string, any>) => {
+    if (!requestItem.id) return false;
+    const colName = requestItem.collectionName || (requestItem.docType === 'change_request' ? 'stats' : 'change_requests');
+    const payload = { ...updates, updatedAt: serverTimestamp() };
+
+    try {
+      await updateDoc(doc(db, colName, requestItem.id), payload);
+      return true;
+    } catch (err) {
+      const otherCol = colName === 'change_requests' ? 'stats' : 'change_requests';
+      try {
+        await updateDoc(doc(db, otherCol, requestItem.id), payload);
+        return true;
+      } catch (err2) {
+        console.error('Kunne ikkje oppdatere dokument:', err2);
+        return false;
+      }
+    }
+  };
+
   const handleUpdateStatus = async (requestItem: ChangeRequest, newStatus: RequestStatus) => {
     if (!requestItem.id) return;
     setIsUpdatingStatus(true);
-    const colName = requestItem.collectionName || (requestItem.docType === 'change_request' ? 'stats' : 'change_requests');
-    
-    try {
-      await updateDoc(doc(db, colName, requestItem.id), {
-        status: newStatus,
-        updatedAt: serverTimestamp(),
-      });
-      if (selectedRequest && selectedRequest.id === requestItem.id) {
-        setSelectedRequest(prev => prev ? { ...prev, status: newStatus } : null);
-      }
-    } catch (err: any) {
-      // Fallback: try other collection if not found
-      const otherCol = colName === 'change_requests' ? 'stats' : 'change_requests';
-      try {
-        await updateDoc(doc(db, otherCol, requestItem.id), {
-          status: newStatus,
-          updatedAt: serverTimestamp(),
-        });
-        if (selectedRequest && selectedRequest.id === requestItem.id) {
-          setSelectedRequest(prev => prev ? { ...prev, status: newStatus } : null);
-        }
-      } catch (err2) {
-        console.error('Kunne ikkje oppdatere status:', err);
-        alert('Kunne ikkje oppdatere status.');
-      }
-    } finally {
-      setIsUpdatingStatus(false);
+    const ok = await updateRequestDoc(requestItem, { status: newStatus });
+    if (ok && selectedRequest && selectedRequest.id === requestItem.id) {
+      setSelectedRequest(prev => prev ? { ...prev, status: newStatus } : null);
     }
+    setIsUpdatingStatus(false);
+  };
+
+  const handleAcceptWithPriceNote = async (requestItem: ChangeRequest, alsoSetStatus?: RequestStatus) => {
+    if (!requestItem.id) return;
+    setIsUpdatingStatus(true);
+    const targetStatus: RequestStatus = alsoSetStatus || (requestItem.status === 'pending' ? 'accepted' : requestItem.status);
+    const finalPrice = priceAdjType === 'agreed'
+      ? (adjustedPriceInput.trim() || requestItem.willingToPay || '')
+      : adjustedPriceInput.trim();
+
+    const updates: Record<string, any> = {
+      status: targetStatus,
+      priceAdjustmentType: priceAdjType,
+      adjustedPrice: finalPrice,
+      priceNote: priceNoteInput.trim(),
+    };
+
+    const ok = await updateRequestDoc(requestItem, updates);
+    if (ok) {
+      if (selectedRequest && selectedRequest.id === requestItem.id) {
+        setSelectedRequest(prev => prev ? { ...prev, ...updates } : null);
+      }
+      setPriceSavedSuccess(true);
+      setTimeout(() => setPriceSavedSuccess(false), 2500);
+    }
+    setIsUpdatingStatus(false);
+  };
+
+  const handleUpdatePaymentStatus = async (requestItem: ChangeRequest, newPaymentStatus: PaymentStatus) => {
+    if (!requestItem.id) return;
+    setIsUpdatingStatus(true);
+    const updates: Record<string, any> = {
+      paymentStatus: newPaymentStatus,
+      ...(newPaymentStatus === 'paid' ? { paidAt: serverTimestamp() } : {}),
+    };
+    const ok = await updateRequestDoc(requestItem, updates);
+    if (ok && selectedRequest && selectedRequest.id === requestItem.id) {
+      setSelectedRequest(prev => prev ? { ...prev, paymentStatus: newPaymentStatus } : null);
+    }
+    setIsUpdatingStatus(false);
   };
 
   const handleSaveDeveloperNotes = async (requestItem: ChangeRequest) => {
-    if (!requestItem.id || !replyText.trim()) return;
+    if (!requestItem.id) return;
     setIsUpdatingStatus(true);
-    const colName = requestItem.collectionName || (requestItem.docType === 'change_request' ? 'stats' : 'change_requests');
-    
-    try {
-      await updateDoc(doc(db, colName, requestItem.id), {
-        developerNotes: replyText.trim(),
-        updatedAt: serverTimestamp(),
-      });
-      if (selectedRequest && selectedRequest.id === requestItem.id) {
-        setSelectedRequest(prev => prev ? { ...prev, developerNotes: replyText.trim() } : null);
-      }
-      setReplyText('');
-    } catch (err) {
-      console.error('Feil ved lagring av kommentar:', err);
-    } finally {
-      setIsUpdatingStatus(false);
+    const ok = await updateRequestDoc(requestItem, { developerNotes: replyText.trim() });
+    if (ok && selectedRequest && selectedRequest.id === requestItem.id) {
+      setSelectedRequest(prev => prev ? { ...prev, developerNotes: replyText.trim() } : null);
     }
+    setIsUpdatingStatus(false);
   };
 
   const handleDeleteRequest = async (requestItem: ChangeRequest) => {
-    if (!requestItem.id || !window.confirm('Er du sikker på at du vil slette denne førespurnaden?')) return;
+    if (!requestItem.id) return;
+    setIsUpdatingStatus(true);
     const colName = requestItem.collectionName || (requestItem.docType === 'change_request' ? 'stats' : 'change_requests');
+    const otherCol = colName === 'change_requests' ? 'stats' : 'change_requests';
+
     try {
       await deleteDoc(doc(db, colName, requestItem.id));
-      if (selectedRequest?.id === requestItem.id) {
-        setSelectedRequest(null);
-      }
     } catch (err) {
-      console.error('Feil ved sletting:', err);
-      alert('Kunne ikkje slette førespurnaden.');
+      console.warn('Sletting frå primærsamling gav feil, prøver fallback:', err);
     }
+
+    try {
+      await deleteDoc(doc(db, otherCol, requestItem.id));
+    } catch (err) {
+      // Ignore if not present in fallback collection
+    }
+
+    if (selectedRequest?.id === requestItem.id) {
+      setSelectedRequest(null);
+    }
+    setConfirmDeleteId(null);
+    setIsUpdatingStatus(false);
   };
 
   const filteredRequests = requests.filter(r => {
     if (filterStatus !== 'all' && r.status !== filterStatus) return false;
     if (filterScope !== 'all' && r.scope !== filterScope) return false;
+    if (filterPayment !== 'all') {
+      const pStatus = r.paymentStatus || (r.willingToPay || r.adjustedPrice ? 'unpaid' : 'not_applicable');
+      if (pStatus !== filterPayment) return false;
+    }
     return true;
   });
 
@@ -801,6 +872,7 @@ export default function ChangeRequestManager() {
                 >
                   <option value="all">Alle statusar</option>
                   <option value="pending">Ventar på svar</option>
+                  <option value="accepted">Godtatt</option>
                   <option value="in_progress">I arbeid</option>
                   <option value="completed">Fullført</option>
                   <option value="declined">Avvist</option>
@@ -819,6 +891,21 @@ export default function ChangeRequestManager() {
                   <option value="medium">Middels</option>
                   <option value="large">Stor</option>
                   <option value="feature">Ny funksjon</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-stone-500 uppercase tracking-wider text-[11px] font-semibold">Betaling:</span>
+                <select
+                  value={filterPayment}
+                  onChange={(e) => setFilterPayment(e.target.value)}
+                  className="py-1 px-2 border border-stone-200 rounded text-xs bg-white text-stone-800 outline-none"
+                >
+                  <option value="all">Alle</option>
+                  <option value="unpaid">Ikkje betalt</option>
+                  <option value="invoiced">Fakturert / Vipps-krav</option>
+                  <option value="paid">Betaling registrert</option>
+                  <option value="not_applicable">Ingen betaling</option>
                 </select>
               </div>
             </div>
@@ -846,6 +933,7 @@ export default function ChangeRequestManager() {
                 {filteredRequests.map((req) => {
                   const isSelected = selectedRequest?.id === req.id;
                   const locCount = req.selectedLocations?.length || 0;
+                  const effPaymentStatus: PaymentStatus = req.paymentStatus || (req.willingToPay || req.adjustedPrice ? 'unpaid' : 'not_applicable');
 
                   return (
                     <div
@@ -858,7 +946,7 @@ export default function ChangeRequestManager() {
                       }`}
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           {/* TYPE & SCOPE BADGES */}
                           {req.type === 'feature' ? (
                             <span className="px-2 py-0.5 bg-purple-100 text-purple-900 font-bold text-[10px] uppercase tracking-wider rounded">
@@ -883,6 +971,11 @@ export default function ChangeRequestManager() {
                             <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-semibold uppercase rounded">
                               Fullført
                             </span>
+                          ) : req.status === 'accepted' ? (
+                            <span className="px-2 py-0.5 bg-teal-50 text-teal-800 border border-teal-300 text-[10px] font-semibold uppercase rounded flex items-center gap-1">
+                              <Check className="w-2.5 h-2.5" />
+                              <span>Godtatt</span>
+                            </span>
                           ) : req.status === 'in_progress' ? (
                             <span className="px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-semibold uppercase rounded">
                               I arbeid
@@ -896,12 +989,46 @@ export default function ChangeRequestManager() {
                               Ventar på Kianosh
                             </span>
                           )}
+
+                          {/* PAYMENT STATUS BADGE */}
+                          {effPaymentStatus === 'paid' && (
+                            <span className="px-2 py-0.5 bg-emerald-600 text-white text-[10px] font-bold uppercase tracking-wider rounded flex items-center gap-1">
+                              <CheckCircle2 className="w-2.5 h-2.5" />
+                              <span>Betalt</span>
+                            </span>
+                          )}
+                          {effPaymentStatus === 'invoiced' && (
+                            <span className="px-2 py-0.5 bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-semibold uppercase rounded">
+                              Fakturert / Krav sendt
+                            </span>
+                          )}
+                          {effPaymentStatus === 'unpaid' && (req.willingToPay || req.adjustedPrice) && (
+                            <span className="px-2 py-0.5 bg-red-50 text-red-700 border border-red-200 text-[10px] font-semibold uppercase rounded">
+                              Ikkje betalt
+                            </span>
+                          )}
                         </div>
 
-                        {/* DATE */}
-                        <span className="text-[11px] text-stone-400 font-mono">
-                          {req.createdAt?.toDate ? req.createdAt.toDate().toLocaleDateString('no-NO') : 'Nyleg'}
-                        </span>
+                        {/* DATE & QUICK DELETE FOR KIANOSH */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-[11px] text-stone-400 font-mono">
+                            {req.createdAt?.toDate ? req.createdAt.toDate().toLocaleDateString('no-NO') : 'Nyleg'}
+                          </span>
+                          {(isKianosh || isOivind) && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedRequest(req);
+                                setConfirmDeleteId(req.id || null);
+                              }}
+                              title="Slett førespurnad"
+                              className="p-1 text-stone-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       {/* TITLE */}
@@ -916,9 +1043,49 @@ export default function ChangeRequestManager() {
                         </p>
                       )}
 
+                      {/* PRICE ADJUSTMENT CALLOUT ON CARD IF SET */}
+                      {(req.priceNote || req.adjustedPrice) && (
+                        <div className={`mb-3 p-2.5 rounded border text-xs flex items-start gap-2 ${
+                          req.priceAdjustmentType === 'higher'
+                            ? 'bg-amber-50/70 border-amber-200 text-amber-950'
+                            : req.priceAdjustmentType === 'lower'
+                            ? 'bg-teal-50/70 border-teal-200 text-teal-950'
+                            : 'bg-stone-50 border-stone-200 text-stone-800'
+                        }`}>
+                          {req.priceAdjustmentType === 'higher' ? (
+                            <TrendingUp className="w-3.5 h-3.5 text-amber-700 shrink-0 mt-0.5" />
+                          ) : req.priceAdjustmentType === 'lower' ? (
+                            <TrendingDown className="w-3.5 h-3.5 text-teal-700 shrink-0 mt-0.5" />
+                          ) : (
+                            <Coins className="w-3.5 h-3.5 text-stone-600 shrink-0 mt-0.5" />
+                          )}
+                          <div className="min-w-0">
+                            <div className="font-semibold flex flex-wrap items-center gap-1.5">
+                              <span>
+                                {req.priceAdjustmentType === 'higher'
+                                  ? 'Prisjustering (høgare pga. arbeidsomfang):'
+                                  : req.priceAdjustmentType === 'lower'
+                                  ? 'Prisjustering (lågare pga. arbeidsomfang):'
+                                  : 'Avtalt pris:'}
+                              </span>
+                              {req.adjustedPrice && (
+                                <span className="font-serif font-bold underline">
+                                  {req.adjustedPrice}
+                                </span>
+                              )}
+                            </div>
+                            {req.priceNote && (
+                              <p className="text-[11px] opacity-90 mt-0.5 line-clamp-2">
+                                «{req.priceNote}»
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
                       {/* FOOTER METRICS */}
                       <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-stone-100 text-xs text-stone-500">
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-wrap items-center gap-3">
                           {locCount > 0 && (
                             <span className="inline-flex items-center gap-1 font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded text-[11px]">
                               <MapPin className="w-3 h-3" />
@@ -929,7 +1096,7 @@ export default function ChangeRequestManager() {
                           {req.willingToPay && (
                             <span className="inline-flex items-center gap-1 font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded text-[11px]">
                               <Coins className="w-3 h-3" />
-                              <span>{req.willingToPay}</span>
+                              <span>Tilbode: {req.willingToPay}</span>
                             </span>
                           )}
 
@@ -976,6 +1143,39 @@ export default function ChangeRequestManager() {
                   </button>
                 </div>
 
+                {/* IN-APP DELETE CONFIRMATION BANNER */}
+                {confirmDeleteId === selectedRequest.id && (
+                  <div className="p-4 bg-red-50 border-2 border-red-300 rounded space-y-3 animate-in fade-in duration-200">
+                    <div className="flex items-start gap-2.5">
+                      <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                      <div className="text-xs text-red-950">
+                        <p className="font-bold">Slette denne førespurnaden permanent?</p>
+                        <p className="text-red-800 mt-0.5">
+                          «{selectedRequest.title}» vil bli fjerna frå lista. Dette kan ikkje angrast.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteId(null)}
+                        className="px-3 py-1.5 bg-white border border-stone-300 rounded text-xs font-semibold text-stone-700 hover:bg-stone-100"
+                      >
+                        Avbryt
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isUpdatingStatus}
+                        onClick={() => handleDeleteRequest(selectedRequest)}
+                        className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded text-xs font-semibold flex items-center gap-1 shadow-xs disabled:opacity-50"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Ja, slett førespurnad</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 {/* METADATA PILLS */}
                 <div className="space-y-2 text-xs">
                   <div className="flex justify-between items-center py-1 border-b border-stone-50">
@@ -1000,10 +1200,25 @@ export default function ChangeRequestManager() {
                   </div>
 
                   {selectedRequest.willingToPay && (
-                    <div className="flex justify-between items-center py-1 border-b border-stone-50 bg-emerald-50/50 px-2 rounded">
-                      <span className="text-emerald-800 font-semibold text-[11px]">Tilbode betaling:</span>
+                    <div className="flex justify-between items-center py-1.5 border-b border-stone-50 bg-emerald-50/50 px-2.5 rounded">
+                      <span className="text-emerald-800 font-semibold text-[11px]">Føreslått / tilbode pris:</span>
                       <span className="font-bold text-emerald-950 font-serif text-sm">
                         {selectedRequest.willingToPay}
+                      </span>
+                    </div>
+                  )}
+
+                  {selectedRequest.adjustedPrice && (
+                    <div className="flex justify-between items-center py-1.5 border-b border-stone-50 bg-amber-50/80 px-2.5 rounded">
+                      <span className="text-amber-900 font-semibold text-[11px]">
+                        {selectedRequest.priceAdjustmentType === 'higher'
+                          ? 'Vurdert pris (høgare pga. arbeid):'
+                          : selectedRequest.priceAdjustmentType === 'lower'
+                          ? 'Vurdert pris (lågare pga. arbeid):'
+                          : 'Godtatt pris:'}
+                      </span>
+                      <span className="font-bold text-amber-950 font-serif text-sm">
+                        {selectedRequest.adjustedPrice}
                       </span>
                     </div>
                   )}
@@ -1075,6 +1290,216 @@ export default function ChangeRequestManager() {
                   )}
                 </div>
 
+                {/* GODTA MED PRISVURDERING / MERKNAD OM PRIS (FOR KIANOSH / ADMIN) */}
+                <div className="p-4 bg-amber-50/50 border border-amber-200/90 rounded-sm space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-amber-950 flex items-center gap-1.5">
+                      <Coins className="w-3.5 h-3.5 text-amber-700" />
+                      <span>Godta & Prisvurdering basert på arbeidsomfang</span>
+                    </span>
+                    {priceSavedSuccess && (
+                      <span className="text-[11px] font-semibold text-emerald-700 flex items-center gap-1">
+                        <Check className="w-3 h-3" /> Lagra!
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Display existing price note to Øivind or anyone viewing */}
+                  {(selectedRequest.priceNote || selectedRequest.adjustedPrice) && (
+                    <div className="p-3 bg-white border border-amber-200 rounded text-xs space-y-1">
+                      <div className="flex items-center justify-between font-semibold text-stone-900">
+                        <span>
+                          {selectedRequest.priceAdjustmentType === 'higher'
+                            ? '📈 Pris vurdert høgare pga. arbeidsmengde'
+                            : selectedRequest.priceAdjustmentType === 'lower'
+                            ? '📉 Pris vurdert lågare pga. arbeidsmengde'
+                            : '✅ Føreslått pris godtatt'}
+                        </span>
+                        {selectedRequest.adjustedPrice && (
+                          <span className="font-serif text-sm font-bold text-amber-950">
+                            {selectedRequest.adjustedPrice}
+                          </span>
+                        )}
+                      </div>
+                      {selectedRequest.priceNote && (
+                        <p className="text-stone-700 leading-relaxed">
+                          {selectedRequest.priceNote}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Interactive controls for Kianosh (and admin) */}
+                  <div className="space-y-2.5 pt-1">
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setPriceAdjType('agreed')}
+                        className={`p-2 rounded border text-[11px] font-semibold flex flex-col items-center gap-1 transition-all ${
+                          priceAdjType === 'agreed'
+                            ? 'bg-emerald-100 border-emerald-400 text-emerald-950 shadow-2xs'
+                            : 'bg-white border-stone-200 text-stone-600 hover:bg-stone-50'
+                        }`}
+                      >
+                        <Equal className="w-3.5 h-3.5" />
+                        <span>Som tilbode</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setPriceAdjType('lower')}
+                        className={`p-2 rounded border text-[11px] font-semibold flex flex-col items-center gap-1 transition-all ${
+                          priceAdjType === 'lower'
+                            ? 'bg-teal-100 border-teal-400 text-teal-950 shadow-2xs'
+                            : 'bg-white border-stone-200 text-stone-600 hover:bg-stone-50'
+                        }`}
+                      >
+                        <TrendingDown className="w-3.5 h-3.5" />
+                        <span>Lågare pris</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setPriceAdjType('higher')}
+                        className={`p-2 rounded border text-[11px] font-semibold flex flex-col items-center gap-1 transition-all ${
+                          priceAdjType === 'higher'
+                            ? 'bg-amber-200/80 border-amber-500 text-amber-950 shadow-2xs'
+                            : 'bg-white border-stone-200 text-stone-600 hover:bg-stone-50'
+                        }`}
+                      >
+                        <TrendingUp className="w-3.5 h-3.5" />
+                        <span>Høgare pris</span>
+                      </button>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-stone-700 mb-1">
+                        {priceAdjType === 'higher'
+                          ? 'Ny / høgare pris (kr):'
+                          : priceAdjType === 'lower'
+                          ? 'Ny / lågare pris (kr):'
+                          : 'Avtalt pris (kr):'}
+                      </label>
+                      <input
+                        type="text"
+                        value={adjustedPriceInput}
+                        onChange={(e) => setAdjustedPriceInput(e.target.value)}
+                        placeholder="F.eks. 800 kr eller 2 500 kr"
+                        className="w-full p-2 text-xs bg-white border border-stone-300 rounded focus:border-brand-dark outline-none font-medium"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-stone-700 mb-1">
+                        Merknad om pris og arbeidsomfang:
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={priceNoteInput}
+                        onChange={(e) => setPriceNoteInput(e.target.value)}
+                        placeholder={
+                          priceAdjType === 'higher'
+                            ? 'Forklar kort kvifor arbeidet krev høgare pris (f.eks. meir kompleks logikk, databaseendringar)...'
+                            : priceAdjType === 'lower'
+                            ? 'Forklar kort kvifor prisen kan setjast lågare (f.eks. raskare å løyse enn antatt)...'
+                            : 'Valfri merknad til pris eller gjennomføring...'
+                        }
+                        className="w-full p-2 text-xs bg-white border border-stone-300 rounded focus:border-brand-dark outline-none"
+                      />
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        disabled={isUpdatingStatus}
+                        onClick={() => handleAcceptWithPriceNote(selectedRequest, 'accepted')}
+                        className="flex-1 py-2 px-3 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-semibold rounded transition-colors flex items-center justify-center gap-1.5 shadow-xs disabled:opacity-50"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>Godta med prismerknad</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={isUpdatingStatus}
+                        onClick={() => handleAcceptWithPriceNote(selectedRequest)}
+                        className="py-2 px-3 bg-stone-800 hover:bg-black text-white text-xs font-semibold rounded transition-colors disabled:opacity-50"
+                      >
+                        Oppdater prismerknad
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* BETALINGSSTATUS / REGISTRER BETALING */}
+                <div className="p-4 bg-stone-50 border border-stone-200 rounded-sm space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-brand-dark flex items-center gap-1.5">
+                      <CreditCard className="w-3.5 h-3.5 text-stone-600" />
+                      <span>Betalingsstatus</span>
+                    </span>
+                    {(selectedRequest.paymentStatus === 'paid') && (
+                      <span className="px-2 py-0.5 bg-emerald-600 text-white text-[10px] font-bold uppercase rounded flex items-center gap-1">
+                        <Check className="w-2.5 h-2.5" /> Registrert betalt
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                    <button
+                      type="button"
+                      disabled={isUpdatingStatus}
+                      onClick={() => handleUpdatePaymentStatus(selectedRequest, 'unpaid')}
+                      className={`p-2 text-[11px] font-semibold rounded border text-center transition-colors ${
+                        (selectedRequest.paymentStatus || 'unpaid') === 'unpaid'
+                          ? 'bg-red-100 border-red-300 text-red-900'
+                          : 'bg-white border-stone-200 text-stone-600 hover:bg-stone-100'
+                      }`}
+                    >
+                      Ikkje betalt
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={isUpdatingStatus}
+                      onClick={() => handleUpdatePaymentStatus(selectedRequest, 'invoiced')}
+                      className={`p-2 text-[11px] font-semibold rounded border text-center transition-colors ${
+                        selectedRequest.paymentStatus === 'invoiced'
+                          ? 'bg-amber-100 border-amber-300 text-amber-900'
+                          : 'bg-white border-stone-200 text-stone-600 hover:bg-stone-100'
+                      }`}
+                    >
+                      Krav sendt
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={isUpdatingStatus}
+                      onClick={() => handleUpdatePaymentStatus(selectedRequest, 'paid')}
+                      className={`p-2 text-[11px] font-semibold rounded border text-center transition-colors ${
+                        selectedRequest.paymentStatus === 'paid'
+                          ? 'bg-emerald-600 border-emerald-700 text-white shadow-2xs'
+                          : 'bg-white border-stone-200 text-stone-600 hover:bg-stone-100'
+                      }`}
+                    >
+                      ✓ Betalt
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={isUpdatingStatus}
+                      onClick={() => handleUpdatePaymentStatus(selectedRequest, 'not_applicable')}
+                      className={`p-2 text-[11px] font-semibold rounded border text-center transition-colors ${
+                        selectedRequest.paymentStatus === 'not_applicable'
+                          ? 'bg-stone-200 border-stone-400 text-stone-800'
+                          : 'bg-white border-stone-200 text-stone-600 hover:bg-stone-100'
+                      }`}
+                    >
+                      Gratis / Ingen
+                    </button>
+                  </div>
+                </div>
+
                 {/* DEVELOPER NOTES / KOMMENTAR FRÅ KIANOSH */}
                 <div className="pt-2 border-t border-stone-100">
                   <span className="text-[11px] font-semibold uppercase tracking-wider text-brand-dark block mb-1">
@@ -1097,7 +1522,7 @@ export default function ChangeRequestManager() {
                     />
                     <button
                       type="button"
-                      disabled={isUpdatingStatus || !replyText.trim()}
+                      disabled={isUpdatingStatus}
                       onClick={() => handleSaveDeveloperNotes(selectedRequest)}
                       className="px-3 py-2 bg-stone-800 hover:bg-black text-white text-xs font-semibold rounded disabled:opacity-50"
                     >
@@ -1109,9 +1534,9 @@ export default function ChangeRequestManager() {
                 {/* STATUS ACTIONS FOR DEVELOPER / ADMIN */}
                 <div className="pt-4 border-t border-stone-100 space-y-2">
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-stone-400 block">
-                    Oppdater status:
+                    Oppdater arbeidsstatus:
                   </span>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
                     <button
                       onClick={() => handleUpdateStatus(selectedRequest, 'pending')}
                       className={`p-2 text-[11px] font-semibold rounded border text-center transition-colors ${
@@ -1121,6 +1546,16 @@ export default function ChangeRequestManager() {
                       }`}
                     >
                       Ventar
+                    </button>
+                    <button
+                      onClick={() => handleUpdateStatus(selectedRequest, 'accepted')}
+                      className={`p-2 text-[11px] font-semibold rounded border text-center transition-colors ${
+                        selectedRequest.status === 'accepted'
+                          ? 'bg-teal-100 border-teal-300 text-teal-900'
+                          : 'border-stone-200 hover:bg-stone-50'
+                      }`}
+                    >
+                      Godtatt
                     </button>
                     <button
                       onClick={() => handleUpdateStatus(selectedRequest, 'in_progress')}
@@ -1158,8 +1593,9 @@ export default function ChangeRequestManager() {
                 {/* DELETE ACTION */}
                 <div className="pt-2 flex justify-end">
                   <button
-                    onClick={() => handleDeleteRequest(selectedRequest)}
-                    className="text-xs text-red-600 hover:text-red-800 flex items-center gap-1 font-semibold"
+                    type="button"
+                    onClick={() => setConfirmDeleteId(selectedRequest.id || null)}
+                    className="text-xs text-red-600 hover:text-red-800 flex items-center gap-1 font-semibold px-2 py-1 rounded hover:bg-red-50 transition-colors"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     <span>Slett førespurnad</span>
@@ -1170,7 +1606,7 @@ export default function ChangeRequestManager() {
             ) : (
               <div className="p-8 text-center bg-stone-50 border border-dashed border-stone-300 rounded-sm">
                 <p className="text-xs text-stone-500">
-                  Vel ein førespurnad frå lista til venstre for å sjå detaljar, merka lokasjonar på nettsida og oppdatere status.
+                  Vel ein førespurnad frå lista til venstre for å sjå detaljar, merka lokasjonar på nettsida, godta med prismerknad eller registrere betaling.
                 </p>
               </div>
             )}
