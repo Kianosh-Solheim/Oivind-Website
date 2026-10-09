@@ -22,6 +22,7 @@ export default function Header() {
     { to: '/refleksjonar', label: t('REFLECTIONS') },
     ...(isAdmin ? [{ to: '/dagbok', label: t('DIARY') }] : []),
     { to: '/boker', label: t('BOOKS') },
+    { to: '/gratishefte', label: t('FREE_BOOKLET') },
     { to: '/om-meg', label: t('ABOUT') },
     { to: '/kontakt', label: t('CONTACT') },
   ];

@@ -12,6 +12,7 @@ const translations = {
   no: {
     HOME: "HEIM",
     BOOKS: "BØKER",
+    FREE_BOOKLET: "GRATISHEFTE",
     REFLECTIONS: "REFLEKSJONAR",
     DIARY: "DAGBOK",
     MUSIC: "MUSIKK",
@@ -36,6 +37,7 @@ const translations = {
   en: {
     HOME: "HOME",
     BOOKS: "BOOKS",
+    FREE_BOOKLET: "FREE BOOKLET",
     REFLECTIONS: "REFLECTIONS",
     DIARY: "DIARY",
     MUSIC: "MUSIC",

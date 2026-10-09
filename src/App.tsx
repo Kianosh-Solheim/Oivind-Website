@@ -12,6 +12,7 @@ import Dagbok from './pages/Dagbok';
 import OmMeg from './pages/OmMeg';
 import Success from './pages/Success';
 import BokSalg from './pages/BokSalg';
+import Gratishefte from './pages/Gratishefte';
 import { LanguageProvider } from './context/LanguageContext';
 import { ElementPickerProvider } from './context/ElementPickerContext';
 import VisitorTracker from './components/VisitorTracker';
@@ -37,6 +38,8 @@ export default function App() {
                 <Route path="/boker/:id" element={<RomanView />} />
                 <Route path="/salg" element={<BokSalg />} />
                 <Route path="/salg/:slug" element={<BokSalg />} />
+                <Route path="/gratishefte" element={<Gratishefte />} />
+                <Route path="/free-booklet" element={<Gratishefte />} />
                 <Route path="/om-meg" element={<OmMeg />} />
                 <Route path="/admin" element={<Admin />} />
                 <Route path="/success" element={<Success />} />

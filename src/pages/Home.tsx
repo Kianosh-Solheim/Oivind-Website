@@ -350,6 +350,37 @@ export default function Home() {
         </motion.div>
       </section>
 
+      <section className="bg-[#132332] text-white py-16 px-6 md:px-12 lg:px-24 border-y border-[#24384B]">
+        <div className="max-w-[1600px] mx-auto flex flex-col lg:flex-row items-start lg:items-center justify-between gap-8">
+          <div className="max-w-2xl">
+            <div className="w-12 h-1 bg-[#0F7E79] mb-4" />
+            <p className="text-xs font-sans tracking-[0.2em] uppercase text-[#C5D2DE] mb-2">
+              {language === 'en' ? 'TENK SJØLV! · FREE READER’S GUIDE' : 'TENK SJØLV! · GRATIS LESARRETTLEIING'}
+            </p>
+            <h2 className="text-2xl md:text-4xl font-serif font-bold text-white leading-tight mb-3">
+              {language === 'en'
+                ? 'Five Questions to Ask Before You Trust an Answer from AI'
+                : 'Fem spørsmål du bør stilla før du stolar på eit svar frå KI'}
+            </h2>
+            <p className="text-sm md:text-base text-[#D6E2EC] font-sans leading-relaxed">
+              {language === 'en'
+                ? 'Use artificial intelligence. Keep your own judgment alive. Read or download the free 8-page booklet in Norwegian or English.'
+                : 'Bruk kunstig intelligens. Vern om di eiga dømmekraft. Les eller last ned gratisheftet på 8 sider på norsk eller engelsk.'}
+            </p>
+          </div>
+          <div className="shrink-0">
+            <Link
+              to="/gratishefte"
+              className="inline-flex items-center gap-2.5 bg-[#0F7E79] hover:bg-[#12938d] text-white font-sans text-xs font-bold tracking-[0.15em] uppercase py-4 px-7 rounded transition-colors shadow-lg"
+            >
+              <BookOpen className="w-4 h-4" />
+              <span>{language === 'en' ? 'GET FREE BOOKLET' : 'FÅ GRATISHEFTET'}</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+        </div>
+      </section>
+
       <section className="pt-24 pb-32 px-6 md:px-12 lg:px-16 mx-auto bg-brand-light font-sans">
         <motion.div 
           className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-6 max-w-[1800px] mx-auto"
