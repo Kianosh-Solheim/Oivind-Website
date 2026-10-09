@@ -21,7 +21,7 @@ import { getCachedDocs } from '../lib/dbCache';
 import { Book } from '../types';
 import { slugify } from '../lib/utils';
 import { useLanguage } from '../context/LanguageContext';
-import { jsPDF } from 'jspdf';
+import { MiniPdf } from '../lib/miniPdf';
 
 type BookletLang = 'no' | 'en';
 
@@ -367,11 +367,7 @@ export const BOOKLET_DATA: Record<BookletLang, BookletContent> = {
 // Generate a pixel-accurate 8-page A4 PDF matching the exact visual design
 export function generateBookletPdf(lang: BookletLang) {
   const data = BOOKLET_DATA[lang];
-  const doc = new jsPDF({
-    orientation: 'portrait',
-    unit: 'mm',
-    format: 'a4'
-  });
+  const doc = new MiniPdf();
 
   const pageWidth = 210;
   const pageHeight = 297;
