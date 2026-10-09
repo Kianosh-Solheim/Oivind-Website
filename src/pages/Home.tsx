@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowRight, BookOpen, ShoppingBag, CreditCard, Sparkles, ExternalLink, Truck } from 'lucide-react';
+import { ArrowRight, BookOpen, ShoppingBag, CreditCard, Sparkles, ExternalLink, Truck, FileText } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { collection, query } from 'firebase/firestore';
@@ -240,6 +240,16 @@ export default function Home() {
                   <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                   <span>{language === 'en' ? 'READ MORE' : 'LES MEIR'}</span>
                 </Link>
+
+                {heroBook.showFreeBookletButton !== false && (
+                  <Link
+                    to="/gratishefte"
+                    className="bg-[#0F7E79] hover:bg-[#12938d] border border-[#0F7E79] text-white transition-all duration-300 font-sans text-[11px] sm:text-xs tracking-wider sm:tracking-[0.15em] uppercase py-2.5 px-4 sm:py-3.5 sm:px-7 md:py-4 md:px-8 inline-flex items-center justify-center gap-2 font-semibold shadow-lg"
+                  >
+                    <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                    <span>{language === 'en' ? 'FREE READER’S GUIDE' : 'GRATIS LESARRETTLEIING'}</span>
+                  </Link>
+                )}
               </motion.div>
             </motion.div>
           </div>
@@ -374,7 +384,7 @@ export default function Home() {
               className="inline-flex items-center gap-2.5 bg-[#0F7E79] hover:bg-[#12938d] text-white font-sans text-xs font-bold tracking-[0.15em] uppercase py-4 px-7 rounded transition-colors shadow-lg"
             >
               <BookOpen className="w-4 h-4" />
-              <span>{language === 'en' ? 'GET FREE BOOKLET' : 'FÅ GRATISHEFTET'}</span>
+              <span>{language === 'en' ? 'FREE READER’S GUIDE' : 'GRATIS LESARRETTLEIING'}</span>
               <ArrowRight className="w-4 h-4" />
             </Link>
           </div>

@@ -12,7 +12,8 @@ import {
   ArrowRight,
   Layers,
   BookMarked,
-  ExternalLink
+  ExternalLink,
+  ShoppingBag
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { collection, query } from 'firebase/firestore';
@@ -830,7 +831,7 @@ export default function Gratishefte() {
           const t = (b.title || '').toLowerCase();
           const tEn = (b.titleEn || '').toLowerCase();
           return t.includes('tenk sjølv') || t.includes('tenk sjolv') || tEn.includes('think for yourself');
-        });
+        }) || books.find(b => b.isHeroFocus);
         if (isMounted && match) {
           setTenkSjolvBook(match);
         }
@@ -867,7 +868,7 @@ export default function Gratishefte() {
     setTimeout(() => setCopiedShareLink(false), 2500);
   };
 
-  // Resolve book link for Page 8 CTA
+  // Resolve book link for Page 8 CTA & Buy Book CTA
   const bookUrl = (() => {
     if (currentLang === 'en') {
       if (tenkSjolvBook?.buyLinkEn) return { href: tenkSjolvBook.buyLinkEn, external: true };
@@ -879,6 +880,18 @@ export default function Gratishefte() {
       return { href: `/salg/${slug}`, external: false };
     }
     return { href: '/boker', external: false };
+  })();
+
+  const directBuyUrl = (() => {
+    if (currentLang === 'en') {
+      if (tenkSjolvBook?.buyLinkEn) return { href: tenkSjolvBook.buyLinkEn, external: true };
+      if (tenkSjolvBook?.buyLink) return { href: tenkSjolvBook.buyLink, external: true };
+      return { href: content.summary.ctaUrl, external: true };
+    }
+    if (tenkSjolvBook?.buyLink) {
+      return { href: tenkSjolvBook.buyLink, external: true };
+    }
+    return bookUrl;
   })();
 
   // Keyboard navigation in flip mode
@@ -1304,6 +1317,54 @@ export default function Gratishefte() {
                   <span>{currentLang === 'en' ? 'Print' : 'Skriv ut'}</span>
                 </button>
               </div>
+
+              {/* Book Callout inside Hero Grid: Liked the questions or want to read more? Buy the book */}
+              <div className="mt-4 pt-5 border-t border-white/15 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white/[0.04] p-4 sm:p-5 rounded-md border border-white/10">
+                <div className="space-y-1">
+                  <div className="text-[11px] font-sans font-bold uppercase tracking-widest text-[#B58442]">
+                    {currentLang === 'en'
+                      ? 'BASED ON THE BOOK THINK FOR YOURSELF!'
+                      : 'UTARBEIDD FRÅ BOKA TENK SJØLV!'}
+                  </div>
+                  <p className="text-sm text-[#E4ECF2] font-sans leading-snug">
+                    {currentLang === 'en'
+                      ? 'Liked the questions or want to read more? Get the full book.'
+                      : 'Likte du spørsmåla eller vil du lese meir? Kjøp heile boka.'}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                  {directBuyUrl.external ? (
+                    <a
+                      href={directBuyUrl.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-5 py-3 bg-[#B58442] hover:bg-[#c8934b] text-white font-sans text-xs font-bold tracking-wider uppercase rounded transition-all shadow-md inline-flex items-center gap-2"
+                    >
+                      <ShoppingBag className="w-3.5 h-3.5" />
+                      <span>{currentLang === 'en' ? 'Buy the book' : 'Kjøp boka'}</span>
+                    </a>
+                  ) : (
+                    <Link
+                      to={directBuyUrl.href}
+                      className="px-5 py-3 bg-[#B58442] hover:bg-[#c8934b] text-white font-sans text-xs font-bold tracking-wider uppercase rounded transition-all shadow-md inline-flex items-center gap-2"
+                    >
+                      <ShoppingBag className="w-3.5 h-3.5" />
+                      <span>{currentLang === 'en' ? 'Buy the book' : 'Kjøp boka'}</span>
+                    </Link>
+                  )}
+
+                  {!bookUrl.external && (
+                    <Link
+                      to={bookUrl.href}
+                      className="px-4 py-3 bg-white/10 hover:bg-white/15 border border-white/20 text-white font-sans text-xs font-semibold tracking-wider uppercase rounded transition-all inline-flex items-center gap-1.5"
+                    >
+                      <BookOpen className="w-3.5 h-3.5" />
+                      <span>{currentLang === 'en' ? 'Read more' : 'Les meir'}</span>
+                    </Link>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* Right: Miniature Interactive Cover Card */}
@@ -1619,48 +1680,61 @@ export default function Gratishefte() {
           </div>
         )}
 
-        {/* BOTTOM DOWNLOAD & BOOK PROMO CARD (HIDDEN ON PRINT) */}
+        {/* BOTTOM BOOK PROMO & DOWNLOAD CARD (HIDDEN ON PRINT) */}
         <div className="print:hidden mt-14 bg-[#132332] text-white rounded-lg p-8 sm:p-10 shadow-xl border border-[#24384B] flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div className="space-y-2 max-w-xl">
-            <div className="text-xs font-sans font-bold uppercase tracking-widest text-[#0F7E79]">
-              {currentLang === 'en' ? 'SAVE OR SHARE THE GUIDE' : 'TA MED DEG HEFTET VIDARE'}
+            <div className="text-xs font-sans font-bold uppercase tracking-widest text-[#B58442]">
+              {currentLang === 'en' ? 'WANT TO READ MORE?' : 'LIKTE DU SPØRSMÅLA ELLER VIL DU LESE MEIR?'}
             </div>
-            <h3 className="font-serif font-bold text-2xl text-white">
+            <h3 className="font-serif font-bold text-2xl sm:text-3xl text-white">
               {currentLang === 'en'
-                ? 'Download the booklet as a PDF — free to share'
-                : 'Last ned heftet som PDF – fritt til å dela vidare'}
+                ? 'Liked the questions? Buy the book THINK FOR YOURSELF!'
+                : 'Likte du spørsmåla? Kjøp boka TENK SJØLV!'}
             </h3>
             <p className="font-sans text-sm text-[#C5D2DE] leading-relaxed">
               {currentLang === 'en'
-                ? 'Feel free to download and share this booklet with colleagues, students, friends, or family.'
-                : 'Last gjerne ned heftet og del det med kollegaer, elevar, studentar, vener eller familie.'}
+                ? 'In the book I explore how artificial intelligence changes learning, language, attention, judgment, and democracy — and how we keep our own thinking alive.'
+                : 'I boka utforskar eg korleis kunstig intelligens påverkar læring, språk, merksemd, dømmekraft og demokrati – og kva vi kan gjera for å halda vår eiga tenking levande.'}
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 shrink-0">
+            {directBuyUrl.external ? (
+              <a
+                href={directBuyUrl.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-6 py-3.5 bg-[#B58442] hover:bg-[#c6924b] text-white text-xs font-bold uppercase tracking-wider rounded inline-flex items-center gap-2 transition-colors shadow-lg"
+              >
+                <ShoppingBag className="w-4 h-4" />
+                <span>{currentLang === 'en' ? 'Buy the book' : 'Kjøp boka'}</span>
+              </a>
+            ) : (
+              <Link
+                to={directBuyUrl.href}
+                className="px-6 py-3.5 bg-[#B58442] hover:bg-[#c6924b] text-white text-xs font-bold uppercase tracking-wider rounded inline-flex items-center gap-2 transition-colors shadow-lg"
+              >
+                <ShoppingBag className="w-4 h-4" />
+                <span>{currentLang === 'en' ? 'Buy the book' : 'Kjøp boka'}</span>
+              </Link>
+            )}
+            {!bookUrl.external && (
+              <Link
+                to={bookUrl.href}
+                className="px-5 py-3.5 bg-white/10 hover:bg-white/15 border border-white/25 text-white text-xs font-bold uppercase tracking-wider rounded inline-flex items-center gap-2 transition-colors"
+              >
+                <BookOpen className="w-4 h-4" />
+                <span>{currentLang === 'en' ? 'Read more' : 'Les meir om boka'}</span>
+              </Link>
+            )}
             <button
               type="button"
-              onClick={() => generateBookletPdf('no')}
-              className="px-5 py-3 bg-[#0F7E79] hover:bg-[#12938d] text-white text-xs font-bold uppercase tracking-wider rounded inline-flex items-center gap-2 transition-colors cursor-pointer"
+              onClick={() => generateBookletPdf(currentLang)}
+              className="px-5 py-3.5 bg-[#0F7E79] hover:bg-[#12938d] text-white text-xs font-bold uppercase tracking-wider rounded inline-flex items-center gap-2 transition-colors cursor-pointer"
             >
               <Download className="w-4 h-4" />
-              <span>PDF (Norsk)</span>
+              <span>{currentLang === 'en' ? 'Download PDF' : 'Last ned PDF'}</span>
             </button>
-            <button
-              type="button"
-              onClick={() => generateBookletPdf('en')}
-              className="px-5 py-3 bg-white/10 hover:bg-white/15 border border-white/25 text-white text-xs font-bold uppercase tracking-wider rounded inline-flex items-center gap-2 transition-colors cursor-pointer"
-            >
-              <Download className="w-4 h-4 text-[#B58442]" />
-              <span>PDF (English)</span>
-            </button>
-            <Link
-              to="/boker"
-              className="px-5 py-3 bg-[#B58442] hover:bg-[#c6924b] text-white text-xs font-bold uppercase tracking-wider rounded inline-flex items-center gap-2 transition-colors"
-            >
-              <BookOpen className="w-4 h-4" />
-              <span>{currentLang === 'en' ? 'See Books' : 'Sjå bøkene'}</span>
-            </Link>
           </div>
         </div>
       </section>

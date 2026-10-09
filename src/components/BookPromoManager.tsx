@@ -89,6 +89,7 @@ export default function BookPromoManager({
   const [formHighlights, setFormHighlights] = useState<string[]>([]);
   const [formAuthorNote, setFormAuthorNote] = useState('');
   const [formShowReviews, setFormShowReviews] = useState(true);
+  const [formShowFreeBookletButton, setFormShowFreeBookletButton] = useState(true);
 
   // Target book editing trigger
   useEffect(() => {
@@ -165,6 +166,7 @@ export default function BookPromoManager({
     ]);
     setFormAuthorNote('');
     setFormShowReviews(true);
+    setFormShowFreeBookletButton(true);
   };
 
   const handleStartEdit = (b: Book) => {
@@ -210,6 +212,7 @@ export default function BookPromoManager({
     ]);
     setFormAuthorNote(b.authorNote || '');
     setFormShowReviews(b.showReviews !== false && b.showPromoQuotes !== false);
+    setFormShowFreeBookletButton(b.showFreeBookletButton !== false);
   };
 
   const handleToggleReviews = async (b: Book, e: React.MouseEvent) => {
@@ -331,6 +334,7 @@ export default function BookPromoManager({
         promoDirectSale: formDirectSale,
         showReviews: formShowReviews,
         showPromoQuotes: formShowReviews,
+        showFreeBookletButton: formShowFreeBookletButton,
         promoQuotes: formQuotes.filter(q => q.quote.trim() !== ''),
         promoHighlights: formHighlights.filter(h => h.trim() !== ''),
         authorNote: formAuthorNote.trim(),
@@ -832,6 +836,27 @@ export default function BookPromoManager({
                       className="sr-only peer"
                     />
                     <div className="w-11 h-6 bg-stone-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                  </label>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-amber-200/70 flex items-center justify-between gap-4">
+                  <div>
+                    <label htmlFor="freeBookletBtnToggle" className="font-semibold text-brand-dark text-xs cursor-pointer block">
+                      Vis «Gratis lesarrettleiing»-knapp på framsida
+                    </label>
+                    <span className="text-[11px] text-stone-600">
+                      Viser ein eigen knapp («GRATIS LESARRETTLEIING») som lenkjar direkte til /gratishefte ved sidan av kjøps- og «Les meir»-knappane når boka er i fokus på framsida.
+                    </span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input
+                      id="freeBookletBtnToggle"
+                      type="checkbox"
+                      checked={formShowFreeBookletButton}
+                      onChange={(e) => setFormShowFreeBookletButton(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-stone-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-stone-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0F7E79]"></div>
                   </label>
                 </div>
               </div>

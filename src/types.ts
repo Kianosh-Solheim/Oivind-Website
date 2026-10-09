@@ -35,6 +35,7 @@ export interface Book {
   isHeroFocus?: boolean;       // Hovudfokus på framsida (erstattar vanleg hero)
   showReviews?: boolean;       // Om omtaler og «Kva seier lesarane?» skal visast
   showPromoQuotes?: boolean;   // Alias for showReviews
+  showFreeBookletButton?: boolean; // Om knapp til /gratishefte skal visast på framsida
 }
 
 export interface ElementLocation {

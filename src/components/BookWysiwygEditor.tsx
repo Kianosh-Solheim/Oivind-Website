@@ -21,7 +21,8 @@ import {
   ChevronRight,
   RotateCcw,
   CheckCircle2,
-  Edit2
+  Edit2,
+  FileText
 } from 'lucide-react';
 import { Book, BookQuote } from '../types';
 import { getBuyLinkType, slugify } from '../lib/utils';
@@ -178,6 +179,7 @@ export default function BookWysiwygEditor({
   const [excerpt, setExcerpt] = useState(book.promoExcerpt || '');
   const [authorNote, setAuthorNote] = useState(book.authorNote || '');
   const [showReviews, setShowReviews] = useState(book.showReviews !== false && book.showPromoQuotes !== false);
+  const [showFreeBookletButton, setShowFreeBookletButton] = useState(book.showFreeBookletButton !== false);
   const [quotes, setQuotes] = useState<BookQuote[]>(
     book.promoQuotes && book.promoQuotes.length > 0 
       ? book.promoQuotes 
@@ -232,6 +234,7 @@ export default function BookWysiwygEditor({
         promoQuotes: quotes.filter(q => q.quote && q.quote.trim().length > 0),
         showReviews: showReviews,
         showPromoQuotes: showReviews,
+        showFreeBookletButton: showFreeBookletButton,
       });
 
       setSaveSuccess(true);
@@ -440,6 +443,19 @@ export default function BookWysiwygEditor({
               💬 Vis omtaler & «Kva seier lesarane?»
             </span>
           </label>
+
+          {/* FREE BOOKLET BUTTON TOGGLE */}
+          <label className="flex items-center gap-2 cursor-pointer group">
+            <input
+              type="checkbox"
+              checked={showFreeBookletButton}
+              onChange={(e) => setShowFreeBookletButton(e.target.checked)}
+              className="rounded accent-teal-500 w-4 h-4 cursor-pointer"
+            />
+            <span className={`font-semibold transition-colors ${showFreeBookletButton ? 'text-teal-400' : 'text-stone-400 group-hover:text-stone-300'}`}>
+              📖 Vis «Gratis lesarrettleiing»-knapp på framsida
+            </span>
+          </label>
         </div>
 
         {/* COVER IMAGE PICKER BUTTON */}
@@ -641,7 +657,7 @@ export default function BookWysiwygEditor({
                       )}
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <button
                         type="button"
                         className="px-5 py-2.5 bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs uppercase tracking-wider rounded transition-colors flex items-center gap-2 shadow-lg"
@@ -657,6 +673,17 @@ export default function BookWysiwygEditor({
                       >
                         Sjå heile salsida →
                       </button>
+
+                      {showFreeBookletButton && (
+                        <span
+                          onClick={() => setShowFreeBookletButton(false)}
+                          title="Klikk for å skjule Gratis lesarrettleiing-knappen (eller bruk avkryssingsboksen øvst)"
+                          className="px-4 py-2.5 bg-[#0F7E79] hover:bg-[#12938d] text-white text-xs font-semibold uppercase tracking-wider rounded transition-colors inline-flex items-center gap-1.5 shadow-md cursor-pointer"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>Gratis lesarrettleiing</span>
+                        </span>
+                      )}
                     </div>
                   </div>
 
