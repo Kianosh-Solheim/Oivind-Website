@@ -11,7 +11,14 @@ export default function Header() {
   const { user, isAdmin } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
 
-  const isComposing = location.pathname.startsWith('/admin') && (location.search.includes('compose=true') || location.search.includes('edit='));
+  const isComposing =
+    location.pathname.startsWith('/admin') &&
+    (location.search.includes('compose=true') ||
+      location.search.includes('edit=') ||
+      location.search.includes('compose_diary=true') ||
+      location.search.includes('edit_diary=') ||
+      location.search.includes('compose_song=true') ||
+      location.search.includes('edit_song='));
   
   if (isComposing) {
     return null;
@@ -22,6 +29,7 @@ export default function Header() {
     { to: '/refleksjonar', label: t('REFLECTIONS') },
     ...(isAdmin ? [{ to: '/dagbok', label: t('DIARY') }] : []),
     { to: '/boker', label: t('BOOKS') },
+    { to: '/musikk', label: t('MUSIC') },
     { to: '/gratishefte', label: t('FREE_BOOKLET') },
     { to: '/om-meg', label: t('ABOUT') },
     { to: '/kontakt', label: t('CONTACT') },
@@ -57,18 +65,21 @@ export default function Header() {
       
       <AnimatePresence>
         <nav className={`${isOpen ? 'flex flex-col mt-6' : 'hidden'} xl:flex xl:flex-wrap xl:mt-0 items-start xl:items-center gap-y-4 xl:gap-y-3 gap-x-6 text-sm font-semibold tracking-wider text-brand-dark w-full xl:w-auto`}>
-          {navLinks.map((link, index) => (
-            <motion.div key={link.to} initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 + 0.3 }}>
-              <Link 
-                to={link.to} 
-                className={`transition-colors relative group ${location.pathname === link.to ? 'text-brand-accent' : 'hover:text-brand-accent'}`} 
-                onClick={() => setIsOpen(false)}
-              >
-                {link.label}
-                <span className={`absolute -bottom-1 left-0 w-0 h-px bg-brand-accent transition-all duration-300 group-hover:w-full ${location.pathname === link.to ? 'w-full' : ''}`}></span>
-              </Link>
-            </motion.div>
-          ))}
+          {navLinks.map((link, index) => {
+            const isActive = link.to === '/' ? location.pathname === '/' : location.pathname.startsWith(link.to);
+            return (
+              <motion.div key={link.to} initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 + 0.3 }}>
+                <Link 
+                  to={link.to} 
+                  className={`transition-colors relative group ${isActive ? 'text-brand-accent' : 'hover:text-brand-accent'}`} 
+                  onClick={() => setIsOpen(false)}
+                >
+                  {link.label}
+                  <span className={`absolute -bottom-1 left-0 w-0 h-px bg-brand-accent transition-all duration-300 group-hover:w-full ${isActive ? 'w-full' : ''}`}></span>
+                </Link>
+              </motion.div>
+            );
+          })}
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7 }} className="w-full h-px xl:w-px xl:h-4 bg-gray-300 xl:mx-2 my-2 xl:my-0"></motion.div>
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.7 }} className="flex items-center gap-3">
             <button onClick={() => setLanguage('no')} className={`transition-colors ${language === 'no' ? 'text-brand-accent' : 'hover:text-brand-accent'}`}>NO</button>

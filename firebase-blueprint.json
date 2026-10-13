@@ -79,6 +79,32 @@
         "createdAt": { "type": "number", "description": "Timestamp" }
       },
       "required": ["src", "alt", "createdAt"]
+    },
+    "song": {
+      "title": "Song",
+      "description": "A song with lyrics, cover image, genre, and audio file.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "slug": { "type": "string" },
+        "lyrics": { "type": "string" },
+        "description": { "type": "string" },
+        "genre": { "type": "string" },
+        "releaseYear": { "type": "number" },
+        "coverImageUrl": { "type": "string" },
+        "coverImageCaption": { "type": "string" },
+        "audioUrl": { "type": "string" },
+        "audioFormat": { "type": "string" },
+        "audioFileName": { "type": "string" },
+        "durationSeconds": { "type": "number" },
+        "allowDownload": { "type": "boolean" },
+        "published": { "type": "boolean" },
+        "language": { "type": "string" },
+        "translationId": { "type": "string" },
+        "createdAt": { "type": "number", "description": "Timestamp" },
+        "updatedAt": { "type": "number", "description": "Timestamp" }
+      },
+      "required": ["title", "lyrics", "published"]
     }
   },
   "firestore": {
@@ -97,6 +123,11 @@
     "change_requests": {
       "schema": { "$ref": "#/entities/changeRequest" },
       "description": "Collection of change and feature requests between Øivind and Kianosh."
+    },
+    "songs": {
+      "schema": { "$ref": "#/entities/song" },
+      "description": "Collection of songs, lyrics, and audio tracks."
     }
   }
 }
+

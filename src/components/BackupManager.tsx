@@ -33,6 +33,7 @@ interface BackupSummary {
   articles: number;
   books: number;
   diary: number;
+  songs?: number;
   gallery: number;
   images: number;
   comments: number;
@@ -50,6 +51,7 @@ interface BackupFile {
     articles?: any[];
     books?: any[];
     diary?: any[];
+    songs?: any[];
     gallery?: any[];
     images?: any[];
     comments?: any[];
@@ -65,12 +67,14 @@ interface BackupManagerProps {
     articles: number;
     books: number;
     diaries: number;
+    songs?: number;
     gallery: number;
   };
   loadedData?: {
     articles?: any[];
     books?: any[];
     diaries?: any[];
+    songs?: any[];
     galleryPhotos?: any[];
     orders?: any[];
     aboutForm?: any;
@@ -94,6 +98,7 @@ export default function BackupManager({ user, onDataChanged, currentCounts, load
     articles: true,
     books: true,
     diary: true,
+    songs: true,
     gallery: true,
     images: true,
     settings: true,
@@ -279,7 +284,12 @@ export default function BackupManager({ user, onDataChanged, currentCounts, load
       if (ordersRes.fromCache) anyFromCache = true;
       const orders = ordersRes.items;
 
-      const totalItems = articles.length + books.length + diary.length + gallery.length + images.length + settings.length + comments.length + orders.length;
+      // 9. Songs
+      const songsRes = await fetchCollectionWithFallback('songs', loadedData?.songs);
+      if (songsRes.fromCache) anyFromCache = true;
+      const songs = songsRes.items;
+
+      const totalItems = articles.length + books.length + diary.length + songs.length + gallery.length + images.length + settings.length + comments.length + orders.length;
 
       if (totalItems === 0) {
         throw new Error('Fann ingen element i databasen eller i lokal hurtigbuffer. Viss Firebase-kvoten for dagen er oppbrukt på dette prosjektet, kan du gjere eit forsøk etter at sida har vore opna slik at cachen vert fylt.');
@@ -293,6 +303,7 @@ export default function BackupManager({ user, onDataChanged, currentCounts, load
           articles: articles.length,
           books: books.length,
           diary: diary.length,
+          songs: songs.length,
           gallery: gallery.length,
           images: images.length,
           settings: settings.length,
@@ -303,6 +314,7 @@ export default function BackupManager({ user, onDataChanged, currentCounts, load
           articles,
           books,
           diary,
+          songs,
           gallery,
           images,
           settings,
@@ -520,6 +532,35 @@ export default function BackupManager({ user, onDataChanged, currentCounts, load
         delete cleaned.id;
         if (cleaned.createdAt) cleaned.createdAt = parseTimestamp(cleaned.createdAt);
         tasks.push({ type: 'orders', id, docData: cleaned });
+      }
+    }
+
+    // 9. Songs
+    if (selectedCategories.songs && data.songs && Array.isArray(data.songs)) {
+      for (const item of data.songs) {
+        const id = item.id || doc(collection(db, 'songs')).id;
+        const cleaned: any = {
+          title: item.title || 'Utan tittel',
+          slug: item.slug || '',
+          lyrics: item.lyrics || '',
+          description: item.description || '',
+          genre: item.genre || '',
+          releaseYear: Number(item.releaseYear) || new Date().getFullYear(),
+          coverImageUrl: item.coverImageUrl || '',
+          coverImageCaption: item.coverImageCaption || '',
+          audioUrl: item.audioUrl || '',
+          audioFormat: item.audioFormat || 'mp3',
+          audioFileName: item.audioFileName || '',
+          durationSeconds: Number(item.durationSeconds) || 0,
+          allowDownload: Boolean(item.allowDownload),
+          published: item.published ?? true,
+          language: item.language || 'no',
+          translationId: item.translationId || '',
+          docType: 'song',
+          createdAt: parseTimestamp(item.createdAt),
+          updatedAt: parseTimestamp(item.updatedAt || item.createdAt),
+        };
+        tasks.push({ type: 'songs', id, docData: cleaned });
       }
     }
 
@@ -857,6 +898,17 @@ export default function BackupManager({ user, onDataChanged, currentCounts, load
                           className="rounded text-brand-dark focus:ring-0"
                         />
                         <span>Ordrar ({importFile.data.orders.length})</span>
+                      </label>
+                    )}
+                    {importFile.data.songs && (
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedCategories.songs}
+                          onChange={(e) => setSelectedCategories({ ...selectedCategories, songs: e.target.checked })}
+                          className="rounded text-brand-dark focus:ring-0"
+                        />
+                        <span>Musikk / Songar ({importFile.data.songs.length})</span>
                       </label>
                     )}
                   </div>

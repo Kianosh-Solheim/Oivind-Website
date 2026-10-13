@@ -5,15 +5,26 @@ import { collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, query, or
 import { invalidateCache, getCachedDocs, subscribeToStats, stats } from '../lib/dbCache';
 import TextareaAutosize from 'react-textarea-autosize';
 import RichTextEditor from '../components/RichTextEditor';
-import { ArrowLeft, Plus, Info, Save, Sparkles, ExternalLink, CreditCard } from 'lucide-react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Plus, Info, Save, Sparkles, ExternalLink, CreditCard, Music, Upload, Volume2, CheckCircle2, AlertCircle, Trash2 } from 'lucide-react';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 
 import FileManager from '../components/FileManager';
 import ImagePickerModal from '../components/ImagePickerModal';
 import BackupManager from '../components/BackupManager';
 import BookPromoManager from '../components/BookPromoManager';
 import ChangeRequestManager from '../components/ChangeRequestManager';
-import { getBuyLinkType } from '../lib/utils';
+import { getBuyLinkType, slugify } from '../lib/utils';
+import { Song } from '../types';
+import {
+  fetchAllSongs,
+  fetchSongBySlugOrId,
+  saveSongDocument,
+  deleteSongDocument,
+  uploadSongAudio,
+  resolvePlayableAudioUrl,
+  formatDuration,
+  detectAudioFormat
+} from '../lib/songService';
 
 interface Article {
   id?: string;
@@ -93,6 +104,25 @@ interface GalleryPhoto {
   createdAt?: any;
 }
 
+const DEFAULT_SONG_FORM: Omit<Song, 'id' | 'createdAt' | 'updatedAt'> = {
+  title: '',
+  slug: '',
+  lyrics: '',
+  description: '',
+  genre: 'Viser',
+  releaseYear: new Date().getFullYear(),
+  coverImageUrl: '',
+  coverImageCaption: '',
+  audioUrl: '',
+  audioFormat: 'mp3',
+  audioFileName: '',
+  durationSeconds: 0,
+  allowDownload: false,
+  published: true,
+  language: 'no',
+  translationId: ''
+};
+
 export default function Admin() {
   const { user, isAdmin, signInWithGoogle, logout } = useAuth();
   const location = useLocation();
@@ -101,6 +131,7 @@ export default function Admin() {
   const [articles, setArticles] = useState<Article[]>([]);
   const [books, setBooks] = useState<Book[]>([]);
   const [diaries, setDiaries] = useState<DiaryEntry[]>([]);
+  const [songs, setSongs] = useState<Song[]>([]);
   const [galleryPhotos, setGalleryPhotos] = useState<GalleryPhoto[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [visitors, setVisitors] = useState<number>(0);
@@ -108,22 +139,33 @@ export default function Admin() {
   
   const [isComposing, setIsComposing] = useState(false);
   const [isComposingDiary, setIsComposingDiary] = useState(false);
+  const [isComposingSong, setIsComposingSong] = useState(false);
   const [showImagePicker, setShowImagePicker] = useState(false);
   const [showBookImagePicker, setShowBookImagePicker] = useState(false);
   const [showGalleryImagePicker, setShowGalleryImagePicker] = useState(false);
+  const [showSongImagePicker, setShowSongImagePicker] = useState(false);
   const [editingArticleId, setEditingArticleId] = useState<string | null>(null);
   const [originalArticle, setOriginalArticle] = useState<Article | null>(null);
   const [editingDiaryId, setEditingDiaryId] = useState<string | null>(null);
   const [originalDiary, setOriginalDiary] = useState<DiaryEntry | null>(null);
+  const [editingSongId, setEditingSongId] = useState<string | null>(null);
+  const [originalSong, setOriginalSong] = useState<Song | null>(null);
   const [editingBookId, setEditingBookId] = useState<string | null>(null);
   const [editingPhotoId, setEditingPhotoId] = useState<string | null>(null);
   const [photoForm, setPhotoForm] = useState({ src: '', alt: '' });
   const [articleFilter, setArticleFilter] = useState('all');
   const [diaryFilter, setDiaryFilter] = useState('all');
+  const [songFilter, setSongFilter] = useState('all');
   const [articleForm, setArticleForm] = useState({ title: '', content: '', published: true, language: 'no', slug: '', imageUrl: '', imageCaption: '', translationId: '' });
+  const [songForm, setSongForm] = useState<Omit<Song, 'id' | 'createdAt' | 'updatedAt'>>(DEFAULT_SONG_FORM);
+  const [isUploadingAudio, setIsUploadingAudio] = useState(false);
+  const [audioUploadProgress, setAudioUploadProgress] = useState<number>(0);
+  const [audioUploadStatus, setAudioUploadStatus] = useState<string>('');
+  const [audioUploadError, setAudioUploadError] = useState<string | null>(null);
+  const [previewAudioUrl, setPreviewAudioUrl] = useState<string>('');
   const [infoDialog, setInfoDialog] = useState<{title: string, content: React.ReactNode} | null>(null);
   const [confirmDialog, setConfirmDialog] = useState<{title: string, message: string, onConfirm: () => void} | null>(null);
-  const [dashboardTab, setDashboardTab] = useState<'overview' | 'articles' | 'books' | 'promo' | 'diary' | 'files' | 'about' | 'photos' | 'orders' | 'backup' | 'requests'>('overview');
+  const [dashboardTab, setDashboardTab] = useState<'overview' | 'articles' | 'books' | 'promo' | 'diary' | 'music' | 'files' | 'about' | 'photos' | 'orders' | 'backup' | 'requests'>('overview');
   const [promoTargetBookId, setPromoTargetBookId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   
@@ -147,10 +189,20 @@ export default function Admin() {
   }, [user]);
 
   useEffect(() => {
+    if (songForm.audioUrl) {
+      resolvePlayableAudioUrl(songForm.audioUrl)
+        .then((url) => setPreviewAudioUrl(url))
+        .catch(() => setPreviewAudioUrl(''));
+    } else {
+      setPreviewAudioUrl('');
+    }
+  }, [songForm.audioUrl]);
+
+  useEffect(() => {
     if (user) {
       const params = new URLSearchParams(location.search);
       const tabParam = params.get('tab');
-      if (tabParam === 'books' || tabParam === 'promo' || tabParam === 'files' || tabParam === 'articles' || tabParam === 'diary' || tabParam === 'about' || tabParam === 'photos' || tabParam === 'orders' || tabParam === 'backup' || tabParam === 'requests') {
+      if (tabParam === 'books' || tabParam === 'promo' || tabParam === 'files' || tabParam === 'articles' || tabParam === 'diary' || tabParam === 'music' || tabParam === 'about' || tabParam === 'photos' || tabParam === 'orders' || tabParam === 'backup' || tabParam === 'requests') {
         setDashboardTab(tabParam as any);
       }
 
@@ -207,6 +259,40 @@ export default function Admin() {
             setIsComposingDiary(true);
           }
         });
+      } else if (params.get('compose_song') === 'true') {
+        const lang = params.get('lang') || 'no';
+        setEditingSongId(null);
+        setOriginalSong(null);
+        setAudioUploadError(null);
+        setSongForm({ ...DEFAULT_SONG_FORM, language: lang });
+        setIsComposingSong(true);
+      } else if (params.get('edit_song')) {
+        const editId = params.get('edit_song')!;
+        fetchSongBySlugOrId(editId, true).then((found) => {
+          if (found) {
+            setEditingSongId(found.id || editId);
+            setAudioUploadError(null);
+            setSongForm({
+              title: found.title || '',
+              slug: found.slug || '',
+              lyrics: found.lyrics || '',
+              description: found.description || '',
+              genre: found.genre || 'Viser',
+              releaseYear: found.releaseYear || new Date().getFullYear(),
+              coverImageUrl: found.coverImageUrl || '',
+              coverImageCaption: found.coverImageCaption || '',
+              audioUrl: found.audioUrl || '',
+              audioFormat: found.audioFormat || 'mp3',
+              audioFileName: found.audioFileName || '',
+              durationSeconds: found.durationSeconds || 0,
+              allowDownload: Boolean(found.allowDownload),
+              published: found.published ?? true,
+              language: found.language || 'no',
+              translationId: found.translationId || ''
+            });
+            setIsComposingSong(true);
+          }
+        });
       }
     }
   }, [user, location.search, navigate]);
@@ -232,6 +318,13 @@ export default function Admin() {
         setDiaries(diariesSnap.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() } as DiaryEntry)));
       } catch (e) {
         console.warn("Could not load diaries:", e);
+      }
+
+      try {
+        const loadedSongs = await fetchAllSongs(true);
+        setSongs(loadedSongs);
+      } catch (e) {
+        console.warn("Could not load songs:", e);
       }
       
       try {
@@ -607,6 +700,137 @@ export default function Admin() {
           invalidateCache(); loadData();
         } catch (e) {
           console.error("Feil ved sletting av oppslag. Mangler rettigheter. Error:", e);
+        }
+        setConfirmDialog(null);
+      }
+    });
+  };
+
+  const handleAudioFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setAudioUploadError(null);
+    setIsUploadingAudio(true);
+    setAudioUploadProgress(5);
+    setAudioUploadStatus('Førebur lydopplasting...');
+
+    try {
+      const result = await uploadSongAudio(file, (pct, statusText) => {
+        setAudioUploadProgress(pct);
+        setAudioUploadStatus(statusText);
+      });
+
+      setSongForm((prev) => ({
+        ...prev,
+        audioUrl: result.audioUrl,
+        audioFormat: result.audioFormat,
+        audioFileName: result.audioFileName,
+        durationSeconds: result.durationSeconds || prev.durationSeconds || 0,
+        title: prev.title || file.name.replace(/\.[^/.]+$/, '').replace(/[_-]+/g, ' ')
+      }));
+    } catch (err: any) {
+      console.error('Feil ved opplasting av lydfil:', err);
+      setAudioUploadError(err?.message || 'Klarte ikkje å laste opp lydfila.');
+    } finally {
+      setIsUploadingAudio(false);
+      e.target.value = '';
+    }
+  };
+
+  const saveSong = async () => {
+    if (!user || isSaving) return;
+    if (!songForm.title.trim()) {
+      setInfoDialog({
+        title: 'Mangler songtittel',
+        content: <p>Skriv inn ein tittel på songen før du lagrar.</p>
+      });
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const computedSlug = songForm.slug?.trim()
+        ? slugify(songForm.slug.trim())
+        : slugify(songForm.title.trim());
+
+      const savedId = await saveSongDocument(
+        {
+          ...songForm,
+          slug: computedSlug,
+          audioFormat: songForm.audioUrl
+            ? detectAudioFormat(songForm.audioFileName || songForm.audioUrl)
+            : songForm.audioFormat || 'mp3'
+        },
+        editingSongId
+      );
+
+      if (songForm.translationId && savedId) {
+        const transSong = songs.find((s) => s.id === songForm.translationId);
+        if (transSong) {
+          await saveSongDocument(
+            {
+              ...transSong,
+              translationId: savedId
+            },
+            transSong.id
+          );
+        }
+      }
+
+      setSongForm(DEFAULT_SONG_FORM);
+      setEditingSongId(null);
+      setOriginalSong(null);
+      setIsComposingSong(false);
+      navigate('/admin?tab=music');
+      await loadData();
+    } catch (err: any) {
+      console.error('Feil ved lagring av song:', err);
+      setInfoDialog({
+        title: 'Feil ved lagring',
+        content: <p>Kunne ikkje lagre songen: {err?.message || 'Ukjend feil'}</p>
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const createSongTranslation = (song: Song) => {
+    const targetLang = (song.language || 'no') === 'no' ? 'en' : 'no';
+    setEditingSongId(null);
+    setAudioUploadError(null);
+    setSongForm({
+      title: `${song.title} (${targetLang.toUpperCase()})`,
+      slug: '',
+      lyrics: '',
+      description: song.description || '',
+      genre: song.genre || 'Viser',
+      releaseYear: song.releaseYear || new Date().getFullYear(),
+      coverImageUrl: song.coverImageUrl || '',
+      coverImageCaption: song.coverImageCaption || '',
+      audioUrl: song.audioUrl || '',
+      audioFormat: song.audioFormat || 'mp3',
+      audioFileName: song.audioFileName || '',
+      durationSeconds: song.durationSeconds || 0,
+      allowDownload: Boolean(song.allowDownload),
+      published: false,
+      language: targetLang,
+      translationId: song.id || ''
+    });
+    setOriginalSong(song);
+    setIsComposingSong(true);
+  };
+
+  const deleteSong = async (id: string) => {
+    setConfirmDialog({
+      title: 'Slett song',
+      message: 'Er du sikker på at du vil slette denne songen og tilhøyrande songtekst?',
+      onConfirm: async () => {
+        try {
+          await deleteSongDocument(id);
+          await loadData();
+        } catch (err) {
+          console.error('Feil ved sletting av song:', err);
         }
         setConfirmDialog(null);
       }
@@ -1067,6 +1291,466 @@ export default function Admin() {
     );
   }
 
+  // --- FULL-SCREEN SONG COMPOSER MODE ---
+  if (isComposingSong) {
+    const genrePresets = ['Viser', 'Ballade', 'Pop/Rock', 'Folk', 'Instrumentalt', 'Salme'];
+
+    return (
+      <div className="min-h-screen bg-white flex flex-col font-sans">
+        <header className="border-b border-gray-100 py-4 px-4 md:px-6 flex flex-wrap justify-between items-center gap-4 sticky top-0 bg-white/95 backdrop-blur z-50">
+          <button
+            onClick={() => {
+              setIsComposingSong(false);
+              setOriginalSong(null);
+              navigate('/admin?tab=music');
+            }}
+            className="flex items-center text-xs font-semibold tracking-widest text-brand-muted hover:text-brand-dark uppercase transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" /> Avbryt
+          </button>
+
+          <div className="flex flex-wrap items-center gap-3 md:gap-4">
+            <div className="flex items-center gap-1">
+              <select
+                value={songForm.language || 'no'}
+                onChange={(e) => setSongForm({ ...songForm, language: e.target.value as any })}
+                className="text-xs font-semibold tracking-widest uppercase border border-gray-200 px-3 py-2 bg-gray-50 outline-none focus:border-brand-accent"
+              >
+                <option value="no">Norsk</option>
+                <option value="en">Engelsk</option>
+                <option value="both">Begge språk</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-1">
+              <select
+                value={songForm.translationId || ''}
+                onChange={(e) => setSongForm({ ...songForm, translationId: e.target.value })}
+                className="text-xs font-semibold tracking-widest border border-gray-200 px-3 py-2 bg-gray-50 outline-none focus:border-brand-accent max-w-[180px]"
+              >
+                <option value="">Ingen omsetjing lenka</option>
+                {songs
+                  .filter(
+                    (s) =>
+                      s.language !== songForm.language &&
+                      s.id !== editingSongId &&
+                      s.language !== 'both'
+                  )
+                  .map((s) => (
+                    <option key={s.id} value={s.id}>
+                      Lenke til: {s.title || 'Utan tittel'}
+                    </option>
+                  ))}
+              </select>
+            </div>
+
+            <label className="flex items-center space-x-2 text-xs font-medium tracking-widest uppercase cursor-pointer">
+              <input
+                type="checkbox"
+                checked={Boolean(songForm.allowDownload)}
+                onChange={(e) => setSongForm({ ...songForm, allowDownload: e.target.checked })}
+                className="accent-brand-accent w-3.5 h-3.5"
+              />
+              <span>Tillat nedlasting</span>
+            </label>
+
+            <label className="flex items-center space-x-2 text-xs font-medium tracking-widest uppercase cursor-pointer">
+              <input
+                type="checkbox"
+                checked={songForm.published}
+                onChange={(e) => setSongForm({ ...songForm, published: e.target.checked })}
+                className="accent-brand-accent w-3.5 h-3.5"
+              />
+              <span>{songForm.published ? 'Publisert' : 'Utkast'}</span>
+            </label>
+
+            <button
+              onClick={saveSong}
+              disabled={isSaving || isUploadingAudio}
+              className={`px-6 py-2.5 text-white text-xs font-semibold tracking-widest uppercase transition-colors ${
+                isSaving || isUploadingAudio
+                  ? 'bg-gray-400 cursor-not-allowed'
+                  : 'bg-brand-dark hover:bg-black'
+              }`}
+            >
+              {isSaving ? 'LAGRAR...' : editingSongId ? 'OPPDATER SONG' : 'PUBLISER SONG'}
+            </button>
+          </div>
+        </header>
+
+        <main
+          className={`flex-grow w-full py-12 relative flex ${
+            originalSong ? 'max-w-[1600px] px-8 mx-auto gap-12' : 'max-w-3xl px-6 mx-auto flex-col'
+          }`}
+        >
+          {infoDialog && (
+            <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4">
+              <div className="bg-brand-surface w-full max-w-md rounded-sm p-8 relative shadow-2xl">
+                <button
+                  onClick={() => setInfoDialog(null)}
+                  className="absolute top-4 right-4 text-brand-muted hover:text-brand-dark"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+                <h3 className="text-xl font-serif mb-4">{infoDialog.title}</h3>
+                <div className="space-y-4 text-sm text-brand-muted leading-relaxed">
+                  {infoDialog.content}
+                </div>
+                <div className="mt-8">
+                  <button
+                    onClick={() => setInfoDialog(null)}
+                    className="w-full py-3 bg-brand-dark text-white text-xs font-semibold tracking-widest uppercase hover:bg-black transition-colors"
+                  >
+                    Eg forstår
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {originalSong && (
+            <div className="w-1/2 flex flex-col border-r border-gray-200 pr-12 overflow-y-auto max-h-[calc(100vh-140px)] sticky top-[88px] opacity-75 hover:opacity-100 transition-opacity">
+              <div className="text-xs font-semibold tracking-widest text-brand-accent uppercase mb-4 sticky top-0 bg-white py-2 z-10 border-b border-gray-100">
+                Originalversjon ({originalSong.language === 'en' ? 'Engelsk' : 'Norsk'})
+              </div>
+              <h1 className="w-full text-4xl md:text-5xl font-serif text-brand-dark mb-6 leading-tight">
+                {originalSong.title}
+              </h1>
+              {originalSong.description && (
+                <p className="text-sm text-brand-muted italic mb-6">{originalSong.description}</p>
+              )}
+              <div
+                className="prose prose-lg brand-prose max-w-none pb-12 font-serif"
+                dangerouslySetInnerHTML={{ __html: originalSong.lyrics }}
+              />
+            </div>
+          )}
+
+          <div className={originalSong ? 'w-1/2 flex flex-col min-w-0' : 'flex flex-col w-full'}>
+            {originalSong && (
+              <div className="text-xs font-semibold tracking-widest text-brand-dark uppercase mb-4 sticky top-0 bg-white py-2 z-10 border-b border-gray-100">
+                Omsetjing ({songForm.language === 'en' ? 'Engelsk' : 'Norsk'})
+              </div>
+            )}
+
+            {/* URL Slug */}
+            <div className="flex items-center gap-2 mb-3 w-full">
+              <input
+                type="text"
+                placeholder="Eigendefinert URL-slug (valfritt, t.d. 'stille-morgon')"
+                value={songForm.slug || ''}
+                onChange={(e) => setSongForm({ ...songForm, slug: e.target.value })}
+                className="w-full text-xs font-sans text-brand-muted placeholder:text-gray-300 border-none outline-none focus:ring-0 bg-transparent"
+              />
+            </div>
+
+            {/* Song Title */}
+            <TextareaAutosize
+              placeholder="Songtittel..."
+              value={songForm.title}
+              onChange={(e) => setSongForm({ ...songForm, title: e.target.value })}
+              className="w-full text-4xl md:text-5xl lg:text-6xl font-serif text-brand-dark placeholder:text-gray-200 mb-6 border-none outline-none focus:ring-0 resize-none bg-transparent leading-tight"
+            />
+
+            {/* Genre, Release Year & Description */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6 p-5 bg-brand-surface border border-brand-sand">
+              <div className="sm:col-span-2 space-y-2">
+                <label className="block text-[11px] font-sans font-semibold tracking-widest uppercase text-brand-dark">
+                  Sjanger / Kategori
+                </label>
+                <input
+                  type="text"
+                  value={songForm.genre || ''}
+                  onChange={(e) => setSongForm({ ...songForm, genre: e.target.value })}
+                  placeholder="F.eks. Viser, Ballade, Pop/Rock..."
+                  className="w-full bg-white border border-gray-200 px-3.5 py-2.5 text-sm text-brand-dark focus:outline-none focus:border-brand-dark"
+                />
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {genrePresets.map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setSongForm({ ...songForm, genre: preset })}
+                      className={`text-[10px] font-sans font-semibold tracking-wider uppercase px-2.5 py-1 border transition-colors ${
+                        songForm.genre === preset
+                          ? 'bg-brand-dark text-white border-brand-dark'
+                          : 'bg-white text-brand-muted border-gray-200 hover:border-brand-dark hover:text-brand-dark'
+                      }`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-[11px] font-sans font-semibold tracking-widest uppercase text-brand-dark">
+                  Utgjevingsår
+                </label>
+                <input
+                  type="number"
+                  value={songForm.releaseYear || ''}
+                  onChange={(e) =>
+                    setSongForm({
+                      ...songForm,
+                      releaseYear: Number(e.target.value) || new Date().getFullYear()
+                    })
+                  }
+                  placeholder="2026"
+                  className="w-full bg-white border border-gray-200 px-3.5 py-2.5 text-sm font-mono text-brand-dark focus:outline-none focus:border-brand-dark"
+                />
+              </div>
+
+              <div className="sm:col-span-3 space-y-2 pt-2">
+                <label className="block text-[11px] font-sans font-semibold tracking-widest uppercase text-brand-dark">
+                  Kort omtale / bakgrunnshistorie (valfritt – visest øvst på songsida og i rutenettet)
+                </label>
+                <TextareaAutosize
+                  minRows={2}
+                  value={songForm.description || ''}
+                  onChange={(e) => setSongForm({ ...songForm, description: e.target.value })}
+                  placeholder="Skriv gjerne eit par setningar om bakgrunnen for songen, melodien eller stemninga..."
+                  className="w-full bg-white border border-gray-200 p-3.5 text-sm font-sans text-brand-dark focus:outline-none focus:border-brand-dark resize-none"
+                />
+              </div>
+            </div>
+
+            {/* Cover Image & Audio Upload Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-6 mb-10">
+              {/* Cover Image Box */}
+              <div className="md:col-span-5 bg-white border border-gray-200 p-5 flex flex-col justify-between">
+                <div>
+                  <label className="block text-[11px] font-sans font-semibold tracking-widest uppercase text-brand-dark mb-3">
+                    Coverbilete (Kvadratisk 1:1)
+                  </label>
+                  {songForm.coverImageUrl ? (
+                    <div className="space-y-3">
+                      <div className="aspect-square w-full max-w-[240px] mx-auto bg-gray-100 border border-gray-200 overflow-hidden relative group">
+                        <img
+                          src={songForm.coverImageUrl}
+                          alt="Cover"
+                          className="w-full h-full object-cover"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSongForm({ ...songForm, coverImageUrl: '', coverImageCaption: '' })
+                          }
+                          className="absolute top-2 right-2 bg-black/75 text-white px-2.5 py-1 text-[10px] font-semibold tracking-widest uppercase hover:bg-black"
+                        >
+                          Fjern
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        value={songForm.coverImageCaption || ''}
+                        onChange={(e) =>
+                          setSongForm({ ...songForm, coverImageCaption: e.target.value })
+                        }
+                        placeholder="Bilettekst / fotokreditering (valfritt)"
+                        className="w-full border border-gray-200 px-3 py-2 text-xs text-brand-muted focus:outline-none focus:border-brand-dark"
+                      />
+                    </div>
+                  ) : (
+                    <div
+                      onClick={() => setShowSongImagePicker(true)}
+                      className="aspect-square w-full max-w-[240px] mx-auto border border-dashed border-gray-300 hover:border-brand-dark flex flex-col items-center justify-center p-6 text-center cursor-pointer hover:bg-gray-50 transition-colors"
+                    >
+                      <Music className="w-8 h-8 text-brand-muted mb-2" />
+                      <span className="text-xs font-semibold tracking-widest uppercase text-brand-dark">
+                        Vel coverbilete
+                      </span>
+                      <span className="text-[11px] text-brand-muted mt-1">
+                        Mine bilde, Unsplash eller Wikimedia
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowSongImagePicker(true)}
+                  className="mt-4 w-full py-2.5 border border-brand-dark text-brand-dark hover:bg-brand-dark hover:text-white text-xs font-semibold tracking-widest uppercase transition-colors"
+                >
+                  {songForm.coverImageUrl ? 'Byt coverbilete' : 'Opne bildeveljar'}
+                </button>
+              </div>
+
+              {/* Audio File Upload & Player Box */}
+              <div className="md:col-span-7 bg-white border border-gray-200 p-5 flex flex-col justify-between space-y-4">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-[11px] font-sans font-semibold tracking-widest uppercase text-brand-dark">
+                      Lydfil & Avspeling
+                    </label>
+                    {songForm.durationSeconds ? (
+                      <span className="text-xs font-mono tabular-nums text-brand-accent font-semibold">
+                        Varigheit: {formatDuration(songForm.durationSeconds)}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {/* Upload Button */}
+                  <div className="border-2 border-dashed border-gray-200 hover:border-brand-dark/50 bg-brand-surface/50 p-5 text-center transition-colors">
+                    <input
+                      type="file"
+                      id="song-audio-upload-input"
+                      accept=".mp3,.m4a,.aac,.opus,.ogg,.wav,audio/*"
+                      onChange={handleAudioFileUpload}
+                      disabled={isUploadingAudio}
+                      className="hidden"
+                    />
+                    <label
+                      htmlFor="song-audio-upload-input"
+                      className={`cursor-pointer flex flex-col items-center justify-center gap-2 ${
+                        isUploadingAudio ? 'opacity-60 pointer-events-none' : ''
+                      }`}
+                    >
+                      <div className="w-10 h-10 rounded-full bg-brand-dark text-white flex items-center justify-center">
+                        <Upload className="w-4 h-4" />
+                      </div>
+                      <span className="text-xs font-semibold tracking-widest uppercase text-brand-dark">
+                        {isUploadingAudio
+                          ? 'Lastar opp lydfil...'
+                          : songForm.audioUrl
+                          ? 'Last opp ny lydfil (erstatt)'
+                          : 'Vel lydfil frå maskina (.MP3, .M4A, .OPUS, .WAV)'}
+                      </span>
+                      <span className="text-[11px] text-brand-muted max-w-md leading-relaxed">
+                        <strong>Tilrådd lydformat:</strong> MP3 er det tryggaste standardvalet for brei kompatibilitet på tvers av nettlesarar og einingar. Opus og AAC (.m4a) gjev mindre filer med svært god lydkvalitet.
+                      </span>
+                    </label>
+                  </div>
+
+                  {/* Upload Progress */}
+                  {isUploadingAudio && (
+                    <div className="p-3 bg-brand-dark text-white text-xs space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span>{audioUploadStatus || 'Lastar opp...'}</span>
+                        <span className="font-mono tabular-nums">{audioUploadProgress}%</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-white/20 overflow-hidden">
+                        <div
+                          className="h-full bg-brand-accent transition-all duration-150"
+                          style={{ width: `${audioUploadProgress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {audioUploadError && (
+                    <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                      <span>{audioUploadError}</span>
+                    </div>
+                  )}
+
+                  {/* Direct URL input / status */}
+                  <div className="space-y-1.5">
+                    <label className="block text-[10px] font-sans font-semibold tracking-widest uppercase text-brand-muted">
+                      Eller lim inn direkte lyd-URL (valfritt)
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={songForm.audioUrl || ''}
+                        onChange={(e) =>
+                          setSongForm({
+                            ...songForm,
+                            audioUrl: e.target.value,
+                            audioFormat: detectAudioFormat(e.target.value)
+                          })
+                        }
+                        placeholder="https://... (.mp3 / .m4a / .opus)"
+                        className="flex-1 border border-gray-200 px-3 py-2 text-xs font-mono text-brand-dark focus:outline-none focus:border-brand-dark"
+                      />
+                      {songForm.audioUrl && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setSongForm({
+                              ...songForm,
+                              audioUrl: '',
+                              audioFileName: '',
+                              durationSeconds: 0
+                            })
+                          }
+                          className="px-3 py-2 border border-gray-200 text-red-600 hover:bg-red-50 text-xs font-semibold uppercase tracking-wider"
+                          title="Fjern lydfil"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Audio Preview Player */}
+                {previewAudioUrl && (
+                  <div className="pt-3 border-t border-gray-100 space-y-2">
+                    <div className="flex items-center justify-between text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-2">
+                      <div className="flex items-center gap-2 truncate">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span className="truncate font-medium">
+                          {songForm.audioFileName || 'Lydfil klar til avspeling'} (
+                          {(songForm.audioFormat || 'mp3').toUpperCase()})
+                        </span>
+                      </div>
+                    </div>
+                    <audio
+                      controls
+                      src={previewAudioUrl}
+                      onLoadedMetadata={(e) => {
+                        const dur = e.currentTarget.duration;
+                        if (isFinite(dur) && dur > 0 && !songForm.durationSeconds) {
+                          setSongForm((prev) => ({
+                            ...prev,
+                            durationSeconds: Math.round(dur)
+                          }));
+                        }
+                      }}
+                      className="w-full h-10"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Song Lyrics Editor */}
+            <div className="mb-3 flex items-center justify-between">
+              <label className="text-xs font-sans font-semibold tracking-widest uppercase text-brand-dark">
+                Songtekst
+              </label>
+              <span className="text-xs text-brand-muted">
+                Tips: Bruk Shift+Enter for linjeskift inne i eit vers, og Enter for nytt vers/strofe.
+              </span>
+            </div>
+            <div className="flex-grow w-full">
+              <RichTextEditor
+                content={songForm.lyrics}
+                onChange={(c) => setSongForm({ ...songForm, lyrics: c })}
+              />
+            </div>
+
+            {showSongImagePicker && (
+              <ImagePickerModal
+                language={songForm.language as any}
+                onClose={() => setShowSongImagePicker(false)}
+                onSelect={(url, caption) => {
+                  setSongForm({
+                    ...songForm,
+                    coverImageUrl: url,
+                    coverImageCaption: caption || songForm.coverImageCaption
+                  });
+                }}
+              />
+            )}
+          </div>
+        </main>
+      </div>
+    );
+  }
+
   // --- DASHBOARD MODE ---
   const filteredArticles = articles.filter(a => {
     if (articleFilter === 'no') return a.language !== 'en';
@@ -1081,6 +1765,14 @@ export default function Admin() {
     if (diaryFilter === 'en') return d.language === 'en';
     if (diaryFilter === 'draft') return !d.published;
     if (diaryFilter === 'published') return d.published;
+    return true;
+  });
+
+  const filteredSongs = songs.filter(s => {
+    if (songFilter === 'no') return s.language !== 'en';
+    if (songFilter === 'en') return s.language === 'en';
+    if (songFilter === 'draft') return !s.published;
+    if (songFilter === 'published') return s.published;
     return true;
   });
 
@@ -1146,6 +1838,13 @@ export default function Admin() {
               Dagbok
             </button>
             <button 
+              onClick={() => setDashboardTab('music')} 
+              className={`text-left px-4 py-3 text-xs tracking-widest uppercase font-semibold transition-colors shrink-0 flex items-center justify-between gap-1.5 ${dashboardTab === 'music' ? 'bg-brand-dark text-white' : 'text-brand-muted hover:text-brand-dark hover:bg-gray-50'}`}
+            >
+              <span>Musikk</span>
+              <Music className={`w-3.5 h-3.5 ${dashboardTab === 'music' ? 'text-amber-300' : 'text-brand-accent'}`} />
+            </button>
+            <button 
               onClick={() => setDashboardTab('files')} 
               className={`text-left px-4 py-3 text-xs tracking-widest uppercase font-semibold transition-colors shrink-0 ${dashboardTab === 'files' ? 'bg-brand-dark text-white' : 'text-brand-muted hover:text-brand-dark hover:bg-gray-50'}`}
             >
@@ -1207,7 +1906,7 @@ export default function Admin() {
           {dashboardTab === 'overview' && (
             <section className="mb-12">
               <h2 className="text-2xl font-serif text-brand-dark mb-6 border-b border-gray-200 pb-4">Oversikt</h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                 <div className="bg-gray-50 border border-gray-100 p-6 flex flex-col items-center justify-center">
                   <span className="text-3xl font-serif text-brand-dark mb-2">{visitors}</span>
                   <span className="text-[10px] uppercase tracking-widest text-brand-muted font-semibold">Besøkande</span>
@@ -1219,6 +1918,10 @@ export default function Admin() {
                 <div className="bg-gray-50 border border-gray-100 p-6 flex flex-col items-center justify-center">
                   <span className="text-3xl font-serif text-brand-dark mb-2">{diaries.length}</span>
                   <span className="text-[10px] uppercase tracking-widest text-brand-muted font-semibold">Dagbokinnlegg</span>
+                </div>
+                <div className="bg-gray-50 border border-gray-100 p-6 flex flex-col items-center justify-center">
+                  <span className="text-3xl font-serif text-brand-dark mb-2">{songs.length}</span>
+                  <span className="text-[10px] uppercase tracking-widest text-brand-muted font-semibold">Songar</span>
                 </div>
                 <div className="bg-gray-50 border border-gray-100 p-6 flex flex-col items-center justify-center">
                   <span className="text-3xl font-serif text-brand-dark mb-2">{books.length}</span>
@@ -1532,6 +2235,251 @@ export default function Admin() {
           </section>
           )}
 
+          {/* MUSIC & SONGS MANAGE */}
+          {dashboardTab === 'music' && (
+          <section className="lg:col-span-9 xl:col-span-10">
+            <div className="max-w-5xl pt-4 lg:pt-8 pr-4 md:pr-8">
+              <div className="flex flex-col md:flex-row md:justify-between md:items-end border-b border-gray-200 pb-4 mb-6 gap-4">
+                <div>
+                  <div className="flex items-center gap-2 mb-3 md:mb-4">
+                    <h2 className="text-2xl font-serif text-brand-dark mb-0">Musikk & Songtekstar</h2>
+                    <button
+                      onClick={() =>
+                        setInfoDialog({
+                          title: 'Musikk & Songtekstar',
+                          content: (
+                            <p>
+                              Her kan du publisere songar med coverbilete, songtekst og lydfil (MP3, M4A/AAC, Opus eller WAV). Kvar song får eit kort i rutenettet på <strong>/musikk</strong> og si eiga songside med innebygd musikkspelar.
+                            </p>
+                          )
+                        })
+                      }
+                      className="text-gray-300 hover:text-brand-dark transition-colors"
+                      title="Informasjon om musikk"
+                    >
+                      <Info className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-4 md:mt-0">
+                    <button
+                      onClick={() => setSongFilter('all')}
+                      className={`text-[10px] md:text-xs font-semibold tracking-widest px-3 py-1.5 uppercase transition-colors ${
+                        songFilter === 'all' ? 'bg-brand-dark text-white' : 'bg-gray-100 text-brand-dark hover:bg-gray-200'
+                      }`}
+                    >
+                      Alle
+                    </button>
+                    <button
+                      onClick={() => setSongFilter('no')}
+                      className={`text-[10px] md:text-xs font-semibold tracking-widest px-3 py-1.5 uppercase transition-colors ${
+                        songFilter === 'no' ? 'bg-brand-dark text-white' : 'bg-gray-100 text-brand-dark hover:bg-gray-200'
+                      }`}
+                    >
+                      No
+                    </button>
+                    <button
+                      onClick={() => setSongFilter('en')}
+                      className={`text-[10px] md:text-xs font-semibold tracking-widest px-3 py-1.5 uppercase transition-colors ${
+                        songFilter === 'en' ? 'bg-brand-dark text-white' : 'bg-gray-100 text-brand-dark hover:bg-gray-200'
+                      }`}
+                    >
+                      En
+                    </button>
+                    <button
+                      onClick={() => setSongFilter('published')}
+                      className={`text-[10px] md:text-xs font-semibold tracking-widest px-3 py-1.5 uppercase transition-colors hidden sm:block ${
+                        songFilter === 'published' ? 'bg-brand-dark text-white' : 'bg-gray-100 text-brand-dark hover:bg-gray-200'
+                      }`}
+                    >
+                      Publisert
+                    </button>
+                    <button
+                      onClick={() => setSongFilter('draft')}
+                      className={`text-[10px] md:text-xs font-semibold tracking-widest px-3 py-1.5 uppercase transition-colors hidden sm:block ${
+                        songFilter === 'draft' ? 'bg-brand-dark text-white' : 'bg-gray-100 text-brand-dark hover:bg-gray-200'
+                      }`}
+                    >
+                      Utkast
+                    </button>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Link
+                    to="/musikk"
+                    className="flex items-center text-xs font-semibold tracking-widest border border-gray-200 text-brand-dark px-4 py-2.5 hover:bg-gray-50 transition-colors shrink-0"
+                  >
+                    SJÅ MUSIKKSIDA
+                  </Link>
+                  <button
+                    onClick={() => navigate('/admin?compose_song=true')}
+                    className="flex items-center text-xs font-semibold tracking-widest bg-brand-dark text-white px-5 py-2.5 hover:bg-black transition-colors shrink-0"
+                  >
+                    <Plus className="w-4 h-4 mr-2" /> NY SONG
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-white border border-gray-100 shadow-sm rounded-sm overflow-hidden hidden md:block">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-100 text-[10px] uppercase tracking-widest text-brand-muted font-semibold">
+                      <th className="p-4 font-semibold">Song</th>
+                      <th className="p-4 font-semibold w-28">Sjanger</th>
+                      <th className="p-4 font-semibold w-24">Lyd</th>
+                      <th className="p-4 font-semibold w-20">Språk</th>
+                      <th className="p-4 font-semibold w-24">Status</th>
+                      <th className="p-4 font-semibold w-44 text-right">Handlingar</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredSongs.map((song) => (
+                      <tr key={song.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors group">
+                        <td className="p-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-stone-900 border border-gray-200 shrink-0 overflow-hidden flex items-center justify-center">
+                              {song.coverImageUrl ? (
+                                <img src={song.coverImageUrl} alt={song.title} className="w-full h-full object-cover" />
+                              ) : (
+                                <Music className="w-4 h-4 text-brand-accent" />
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-semibold text-sm text-brand-dark truncate">
+                                {song.title || 'Utan tittel'}
+                              </div>
+                              <div className="text-xs text-gray-400 truncate">
+                                /musikk/{song.slug || song.id}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="p-4 text-xs text-brand-muted">
+                          {song.genre || '–'}
+                        </td>
+                        <td className="p-4">
+                          {song.audioUrl ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase text-emerald-700 bg-emerald-50 px-2 py-0.5">
+                              <Volume2 className="w-3 h-3" />
+                              {song.durationSeconds ? formatDuration(song.durationSeconds) : (song.audioFormat || 'MP3')}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-gray-400 uppercase tracking-wider">Kun tekst</span>
+                          )}
+                        </td>
+                        <td className="p-4">
+                          <span className="text-[10px] font-semibold text-brand-accent uppercase tracking-widest">
+                            {song.language === 'both' ? 'Begge' : song.language === 'en' ? 'EN' : 'NO'}
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          <span
+                            className={`px-2 py-1 text-[10px] uppercase tracking-widest font-semibold rounded-sm inline-flex items-center gap-1 ${
+                              song.published !== false ? 'bg-brand-dark text-white' : 'bg-amber-100 text-amber-800'
+                            }`}
+                          >
+                            {song.published !== false ? 'Publisert' : 'Utkast'}
+                          </span>
+                        </td>
+                        <td className="p-4 text-right space-x-3">
+                          <Link
+                            to={`/musikk/${song.slug || song.id}`}
+                            className="text-brand-muted hover:text-brand-dark text-xs font-semibold tracking-widest transition-colors"
+                          >
+                            VIS
+                          </Link>
+                          {!song.translationId && song.language !== 'both' && (
+                            <button
+                              onClick={() => createSongTranslation(song)}
+                              className="text-brand-accent text-xs font-semibold tracking-widest opacity-80 hover:opacity-100 transition-opacity"
+                            >
+                              OMSETT
+                            </button>
+                          )}
+                          <button
+                            onClick={() => navigate(`/admin?edit_song=${song.id}`)}
+                            className="text-brand-dark text-xs font-semibold tracking-widest opacity-80 hover:opacity-100 transition-opacity"
+                          >
+                            REDIGER
+                          </button>
+                          <button
+                            onClick={() => deleteSong(song.id!)}
+                            className="text-red-500 text-xs font-semibold tracking-widest opacity-80 hover:opacity-100 transition-opacity"
+                          >
+                            SLETT
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {filteredSongs.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="p-8 text-center text-sm text-brand-muted">
+                          Ingen songar lagt til enno. Trykk «NY SONG» for å publisere songtekst og lydfil.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile View */}
+              <div className="md:hidden space-y-3">
+                {filteredSongs.map((song) => (
+                  <div key={song.id} className="p-4 border border-gray-100 flex justify-between items-start bg-white shadow-sm">
+                    <div className="pr-4 flex-grow min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-[10px] font-semibold text-brand-accent uppercase tracking-widest">
+                          {song.language === 'both' ? 'Begge' : song.language === 'en' ? 'Engelsk' : 'Norsk'}
+                        </span>
+                        <span
+                          className={`text-[10px] font-semibold px-2 py-0.5 rounded-sm uppercase tracking-widest ${
+                            song.published !== false ? 'bg-brand-dark text-white' : 'bg-amber-100 text-amber-800'
+                          }`}
+                        >
+                          {song.published !== false ? 'PUB' : 'UTKAST'}
+                        </span>
+                        {song.audioUrl && (
+                          <span className="text-[10px] font-mono text-emerald-700 bg-emerald-50 px-1.5 py-0.5">
+                            LYD
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="font-semibold text-sm truncate">{song.title || 'Utan tittel'}</h3>
+                      <p className="text-xs text-gray-500 mt-0.5">{song.genre || 'Song'}</p>
+                    </div>
+                    <div className="flex flex-col gap-2 shrink-0 items-end">
+                      {!song.translationId && song.language !== 'both' && (
+                        <button
+                          onClick={() => createSongTranslation(song)}
+                          className="text-brand-accent text-[10px] font-semibold tracking-widest"
+                        >
+                          OMSETT
+                        </button>
+                      )}
+                      <button
+                        onClick={() => navigate(`/admin?edit_song=${song.id}`)}
+                        className="text-brand-dark text-[10px] font-semibold tracking-widest"
+                      >
+                        REDIGER
+                      </button>
+                      <button
+                        onClick={() => deleteSong(song.id!)}
+                        className="text-red-500 text-[10px] font-semibold tracking-widest"
+                      >
+                        SLETT
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {filteredSongs.length === 0 && (
+                  <div className="text-sm text-brand-muted p-4 border border-gray-100 text-center">
+                    Ingen songar lagt til enno.
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+          )}
+
           {/* FILES MANAGE */}
           {dashboardTab === 'files' && (
           <div className="pt-4 lg:pt-8 bg-white md:bg-transparent max-w-5xl h-[80vh] min-h-[600px] flex flex-col">
@@ -1797,12 +2745,14 @@ export default function Admin() {
                 articles: articles.length,
                 books: books.length,
                 diaries: diaries.length,
+                songs: songs.length,
                 gallery: galleryPhotos.length
               }}
               loadedData={{
                 articles,
                 books,
                 diaries,
+                songs,
                 galleryPhotos,
                 orders,
                 aboutForm,

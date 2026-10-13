@@ -13,45 +13,55 @@ import OmMeg from './pages/OmMeg';
 import Success from './pages/Success';
 import BokSalg from './pages/BokSalg';
 import Gratishefte from './pages/Gratishefte';
+import Musikk from './pages/Musikk';
+import SongView from './pages/SongView';
+import GlobalMusicPlayer from './components/GlobalMusicPlayer';
 import { LanguageProvider } from './context/LanguageContext';
 import { ElementPickerProvider } from './context/ElementPickerContext';
+import { MusicPlayerProvider } from './context/MusicPlayerContext';
 import VisitorTracker from './components/VisitorTracker';
 import ScrollToTop from './components/ScrollToTop';
 
 export default function App() {
   return (
     <LanguageProvider>
-      <Router>
-        <ElementPickerProvider>
-          <ScrollToTop />
-          <VisitorTracker />
-          <div className="min-h-screen bg-white">
-            <Header />
-            <main>
-              <Routes>
-                <Route path="/" element={<Home />} />
-                <Route path="/foto" element={<Foto />} />
-                <Route path="/refleksjonar" element={<Refleksjoner />} />
-                <Route path="/refleksjonar/:slug" element={<RefleksjonView />} />
-                <Route path="/dagbok" element={<Dagbok />} />
-                <Route path="/boker" element={<Romanar />} />
-                <Route path="/boker/:id" element={<RomanView />} />
-                <Route path="/salg" element={<BokSalg />} />
-                <Route path="/salg/:slug" element={<BokSalg />} />
-                <Route path="/gratishefte" element={<Gratishefte />} />
-                <Route path="/free-booklet" element={<Gratishefte />} />
-                <Route path="/om-meg" element={<OmMeg />} />
-                <Route path="/admin" element={<Admin />} />
-                <Route path="/success" element={<Success />} />
-                {/* Redirect old English routes to the standard ones */}
-                <Route path="/English" element={<Navigate to="/refleksjonar" replace />} />
-                <Route path="/English/:slug" element={<Navigate to="/refleksjonar/:slug" replace />} />
-              </Routes>
-            </main>
-            <Footer />
-          </div>
-        </ElementPickerProvider>
-      </Router>
+      <MusicPlayerProvider>
+        <Router>
+          <ElementPickerProvider>
+            <ScrollToTop />
+            <VisitorTracker />
+            <div className="min-h-screen bg-white">
+              <Header />
+              <main>
+                <Routes>
+                  <Route path="/" element={<Home />} />
+                  <Route path="/foto" element={<Foto />} />
+                  <Route path="/refleksjonar" element={<Refleksjoner />} />
+                  <Route path="/refleksjonar/:slug" element={<RefleksjonView />} />
+                  <Route path="/dagbok" element={<Dagbok />} />
+                  <Route path="/boker" element={<Romanar />} />
+                  <Route path="/boker/:id" element={<RomanView />} />
+                  <Route path="/musikk" element={<Musikk />} />
+                  <Route path="/musikk/:slug" element={<SongView />} />
+                  <Route path="/salg" element={<BokSalg />} />
+                  <Route path="/salg/:slug" element={<BokSalg />} />
+                  <Route path="/gratishefte" element={<Gratishefte />} />
+                  <Route path="/free-booklet" element={<Gratishefte />} />
+                  <Route path="/om-meg" element={<OmMeg />} />
+                  <Route path="/admin" element={<Admin />} />
+                  <Route path="/success" element={<Success />} />
+                  {/* Redirect old English routes to the standard ones */}
+                  <Route path="/English" element={<Navigate to="/refleksjonar" replace />} />
+                  <Route path="/English/:slug" element={<Navigate to="/refleksjonar/:slug" replace />} />
+                </Routes>
+              </main>
+              <Footer />
+              <GlobalMusicPlayer />
+            </div>
+          </ElementPickerProvider>
+        </Router>
+      </MusicPlayerProvider>
     </LanguageProvider>
   );
 }
+

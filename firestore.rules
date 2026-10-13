@@ -87,9 +87,22 @@ service cloud.firestore {
       allow update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
     }
 
+    // Musikk / Songar: Alle kan lese publiserte songar, berre admin kan redigere/slette/sjå utkast
+    match /songs/{songId} {
+      allow read: if resource.data.published == true || isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // Lydfil-blokker (reserve for opplasting av lydfiler i Firestore)
+    match /song_audio_chunks/{chunkId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // Standard for alt anna som eventuelt ikkje er nemnt: stengt
     match /{document=**} {
       allow read, write: if false;
     }
   }
 }
+

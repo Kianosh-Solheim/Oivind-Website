@@ -120,3 +120,28 @@ export interface AboutSettings {
   shortBioEn: string;
   imageUrl: string;
 }
+
+export interface Song {
+  id?: string;
+  title: string;
+  slug?: string;
+  lyrics: string;
+  description?: string;
+  genre?: string;
+  releaseYear?: number;
+  coverImageUrl?: string;
+  coverImageCaption?: string;
+  audioUrl?: string;
+  audioFormat?: string;       // e.g. 'mp3' | 'm4a' | 'opus' | 'ogg' | 'wav'
+  audioFileName?: string;
+  durationSeconds?: number;
+  allowDownload?: boolean;
+  published: boolean;
+  language?: 'no' | 'en' | 'both' | string;
+  translationId?: string;
+  collectionName?: 'songs' | 'stats';
+  docType?: string;
+  createdAt?: any;
+  updatedAt?: any;
+}
+
