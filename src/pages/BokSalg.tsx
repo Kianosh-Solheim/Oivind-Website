@@ -15,15 +15,17 @@ import {
   ChevronDown,
   AlertCircle,
   Sparkles,
-  Edit3
+  Edit3,
+  Globe
 } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { collection, query, orderBy, getDocs, doc, getDoc, getDocFromCache, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { getCachedDocs, invalidateCache } from '../lib/dbCache';
 import { motion, AnimatePresence } from 'motion/react';
-import { slugify, getBuyLinkType } from '../lib/utils';
+import { slugify, resolveBookBuyLinks, getSecondaryEditionButtonLabel, hasBookLanguageInfo } from '../lib/utils';
 import { Book, AboutSettings } from '../types';
 import { useAuth } from '../lib/AuthContext';
+import { useLanguage } from '../context/LanguageContext';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import BookWysiwygEditor from '../components/BookWysiwygEditor';
@@ -32,6 +34,7 @@ export default function BokSalg() {
   const { slug } = useParams<{ slug?: string }>();
   const navigate = useNavigate();
   const { isAdmin } = useAuth();
+  const { language, setLanguage } = useLanguage();
   const [book, setBook] = useState<Book | null>(null);
   const [, setAllBooks] = useState<Book[]>([]);
   const [aboutData, setAboutData] = useState<AboutSettings | null>(null);
@@ -159,29 +162,59 @@ export default function BokSalg() {
     );
   }
 
+  const currentLang: 'no' | 'en' = language === 'en' ? 'en' : 'no';
+  const hasLangInfo = hasBookLanguageInfo(book, currentLang);
   const effectivePrice = book.promoSpecialPrice || book.price || 299;
-  const buyUrl = book.buyLink || book.buyLinkEn || '';
-  const buyLinkType = getBuyLinkType(buyUrl);
-  const isAmazon = buyLinkType === 'amazon';
-  const isStripe = buyLinkType === 'stripe';
+  const buyLinks = resolveBookBuyLinks(book, currentLang);
+  const buyUrl = buyLinks.primaryLink;
+  const isAmazon = buyLinks.primaryIsAmazon;
+  const isStripe = buyLinks.primaryIsStripe;
+  const hasBothEditions = buyLinks.hasBothEditions;
+  const secondaryBuyUrl = buyLinks.secondaryLink;
+  const secondaryLang = buyLinks.secondaryLang;
 
-  const defaultBadge = isAmazon ? 'Tilgjengeleg på Amazon' : 'Moglegheit for signert utgåve utan ekstra kostnad';
-  const badgeText = (!book.promoBadge || book.promoBadge === 'Signert utgåve frå forfattaren' || (isAmazon && book.promoBadge.toLowerCase().includes('signert')))
+  const displayTitle = (currentLang === 'en' && book.titleEn) ? book.titleEn : book.title;
+  const displayDescription = currentLang === 'en'
+    ? (book.promoDescriptionEn || book.descriptionEn || (book.language === 'en' ? (book.promoDescription || book.description) : ''))
+    : (book.promoDescription || book.description || '');
+  const displayExcerpt = currentLang === 'en'
+    ? (book.promoExcerptEn || (book.language === 'en' ? book.promoExcerpt : ''))
+    : (book.promoExcerpt || '');
+
+  const defaultBadge = isAmazon
+    ? (currentLang === 'en' ? 'Available on Amazon' : 'Tilgjengeleg på Amazon')
+    : (currentLang === 'en' ? 'Signed edition available' : 'Moglegheit for signert utgåve utan ekstra kostnad');
+  const rawBadge = currentLang === 'en' ? book.promoBadgeEn : book.promoBadge;
+  const badgeText = (!rawBadge || rawBadge === 'Signert utgåve frå forfattaren' || (isAmazon && rawBadge.toLowerCase().includes('signert')))
     ? defaultBadge
-    : book.promoBadge;
-  const headline = book.promoHeadline || 'Ein gripande roman om menneske, val og framtid';
-  const shippingText = book.promoShippingText || (isAmazon ? 'Levering frå Amazon' : 'Fri frakt rett heim i postkassa di');
+    : rawBadge;
+
+  const headline = currentLang === 'en'
+    ? (book.promoHeadlineEn || (book.language === 'en' ? book.promoHeadline : ''))
+    : (book.promoHeadline || 'Ein gripande roman om menneske, val og framtid');
+
+  const shippingText = isAmazon
+    ? (currentLang === 'en' ? (book.promoShippingTextEn || 'In stock • Delivery from Amazon') : 'Levering frå Amazon')
+    : (currentLang === 'en'
+        ? (book.promoShippingTextEn || 'Free shipping direct to your mailbox')
+        : (book.promoShippingText || 'Fri frakt rett heim i postkassa di'));
   
   const isReviewsExplicitlyOff = book.showReviews === false || book.showPromoQuotes === false;
   const showReviewsSection = !isReviewsExplicitlyOff;
 
-  const quotes = book.promoQuotes && book.promoQuotes.length > 0 ? book.promoQuotes : [
-    {
-      quote: "Bøker som opnar dører til refleksjon og djupare meining.",
-      author: "Omtale",
-      source: "Litterært blikk"
-    }
-  ];
+  const quotes = currentLang === 'en'
+    ? (book.promoQuotesEn && book.promoQuotesEn.length > 0
+        ? book.promoQuotesEn
+        : (book.language === 'en' && book.promoQuotes ? book.promoQuotes : []))
+    : (book.promoQuotes && book.promoQuotes.length > 0
+        ? book.promoQuotes
+        : [
+            {
+              quote: "Bøker som opnar dører til refleksjon og djupare meining.",
+              author: "Omtale",
+              source: "Litterært blikk"
+            }
+          ]);
 
   const handleWysiwygSave = async (updatedFields: Partial<Book>) => {
     if (!book || !book.id) return;
@@ -233,17 +266,29 @@ export default function BokSalg() {
 
       {/* TOP NAVIGATION / BREADCRUMB */}
       <nav className="border-b border-stone-200/70 bg-white/80 backdrop-blur-sm sticky top-0 z-40 px-6 md:px-12 py-3.5">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
+        <div className="max-w-6xl mx-auto flex items-center justify-between gap-3">
           <Link 
             to="/boker" 
-            className="inline-flex items-center text-xs font-semibold tracking-widest uppercase text-brand-muted hover:text-brand-dark transition-colors"
+            className="inline-flex items-center text-xs font-semibold tracking-widest uppercase text-brand-muted hover:text-brand-dark transition-colors shrink-0"
           >
-            <ArrowLeft className="w-3.5 h-3.5 mr-2" /> Alle bøker
+            <ArrowLeft className="w-3.5 h-3.5 mr-2" /> {currentLang === 'en' ? 'All books' : 'Alle bøker'}
           </Link>
-          <div className="flex items-center gap-3">
-            <span className="hidden sm:inline-block text-[11px] font-mono uppercase tracking-wider text-brand-muted">
-              Kampanje & Salg
+          <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
+            <span className="hidden md:inline-block text-[11px] font-mono uppercase tracking-wider text-brand-muted">
+              {currentLang === 'en' ? 'Book Launch & Store' : 'Kampanje & Salg'}
             </span>
+            {hasBothEditions && secondaryBuyUrl && secondaryLang && (
+              <a
+                href={secondaryBuyUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hidden sm:inline-flex px-3 py-2 border border-stone-300 hover:border-brand-dark bg-white hover:bg-stone-50 text-brand-dark text-[11px] font-semibold tracking-wider uppercase transition-colors items-center gap-1.5"
+              >
+                <Globe className="w-3.5 h-3.5 text-brand-accent" />
+                <span>{getSecondaryEditionButtonLabel(secondaryLang, secondaryBuyUrl, currentLang)}</span>
+                <ExternalLink className="w-3 h-3 opacity-60" />
+              </a>
+            )}
             {buyUrl ? (
               <a
                 href={buyUrl}
@@ -252,12 +297,18 @@ export default function BokSalg() {
                 className="px-4 py-2 bg-brand-dark hover:bg-black text-white text-[11px] font-semibold tracking-widest uppercase transition-colors flex items-center gap-1.5 shadow-sm"
               >
                 <ShoppingBag className="w-3.5 h-3.5" />
-                <span>{isAmazon ? 'Kjøp frå Amazon' : isStripe ? 'Kjøp boka (Stripe)' : 'Kjøp boka'}</span>
+                <span>
+                  {isAmazon
+                    ? (currentLang === 'en' ? 'Buy on Amazon' : 'Kjøp frå Amazon')
+                    : isStripe
+                      ? (currentLang === 'en' ? 'Buy book (Stripe)' : 'Kjøp boka (Stripe)')
+                      : (currentLang === 'en' ? 'Buy book' : 'Kjøp boka')}
+                </span>
                 <ExternalLink className="w-3 h-3 ml-0.5 opacity-70" />
               </a>
             ) : (
               <span className="px-3 py-1.5 text-xs text-stone-500 bg-stone-100 rounded">
-                Kjøpslenkje kjem snart
+                {currentLang === 'en' ? 'Purchase link coming soon' : 'Kjøpslenkje kjem snart'}
               </span>
             )}
           </div>
@@ -306,7 +357,7 @@ export default function BokSalg() {
               {/* Small trust caption under cover */}
               <div className="mt-4 text-center">
                 <p className="text-[11px] font-sans text-brand-muted tracking-wider uppercase">
-                  Fysisk bok • {book.pageCount ? `${book.pageCount} sider • ` : ''} Utgjeve {book.publishedYear}
+                  {currentLang === 'en' ? 'Physical book' : 'Fysisk bok'} • {book.pageCount ? `${book.pageCount} ${currentLang === 'en' ? 'pages' : 'sider'} • ` : ''} {currentLang === 'en' ? 'Published' : 'Utgjeve'} {book.publishedYear}
                 </p>
               </div>
             </div>
@@ -327,25 +378,55 @@ export default function BokSalg() {
 
             {/* TITLE */}
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-serif text-brand-dark leading-[1.1] mb-5 tracking-tight">
-              {book.title}
+              {displayTitle}
             </h1>
 
             {/* AUTHOR CREDIT */}
             <p className="text-sm font-sans tracking-widest uppercase font-semibold text-brand-accent mb-6">
-              av Øivind H. Solheim
+              {currentLang === 'en' ? 'by Øivind H. Solheim' : 'av Øivind H. Solheim'}
             </p>
 
-            {/* HERO TAGLINE / SLAGORD */}
-            <p className="text-lg sm:text-xl font-serif text-stone-700 leading-relaxed mb-8 border-l-2 border-brand-accent pl-4 italic">
-              {headline}
-            </p>
+            {/* HERO TAGLINE / SLAGORD OR MISSING LANGUAGE INFO BOX */}
+            {hasLangInfo ? (
+              headline ? (
+                <p className="text-lg sm:text-xl font-serif text-stone-700 leading-relaxed mb-8 border-l-2 border-brand-accent pl-4 italic">
+                  {headline}
+                </p>
+              ) : null
+            ) : (
+              <div className="w-full bg-amber-50/90 border border-amber-200 rounded-sm p-5 mb-8">
+                <div className="flex items-start gap-3 mb-3.5">
+                  <AlertCircle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+                  <div>
+                    <h3 className="text-sm font-semibold text-stone-900 mb-1">
+                      {currentLang === 'en'
+                        ? 'Not all information is available in English'
+                        : 'Ikkje all informasjon er tilgjengeleg på norsk'}
+                    </h3>
+                    <p className="text-xs sm:text-sm text-stone-700 leading-relaxed">
+                      {currentLang === 'en'
+                        ? 'Not all information for this book is available in the language the website is currently set to. Switch language to read the full presentation.'
+                        : 'Ikkje all informasjon om denne boka er tilgjengeleg på språket nettsida er på no. Byt språk for å lese heile omtalen.'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setLanguage(currentLang === 'en' ? 'no' : 'en')}
+                  className="px-4 py-2.5 bg-brand-dark hover:bg-black text-white text-xs font-semibold tracking-wider uppercase rounded-sm transition-colors inline-flex items-center gap-2 cursor-pointer"
+                >
+                  <Globe className="w-4 h-4 text-amber-400" />
+                  <span>{currentLang === 'en' ? 'Switch to Norwegian (Norsk)' : 'Byt til engelsk (English)'}</span>
+                </button>
+              </div>
+            )}
 
             {/* PRICE & OFFERS BOX */}
             <div className="w-full bg-white border border-stone-200/90 rounded-sm p-6 sm:p-7 shadow-sm mb-8">
               <div className="flex flex-wrap items-baseline justify-between gap-4 pb-4 border-b border-stone-100">
                 <div>
                   <span className="text-xs uppercase tracking-widest text-brand-muted font-semibold block mb-1">
-                    Kampanjepris
+                    {currentLang === 'en' ? 'Book Price' : 'Kampanjepris'}
                   </span>
                   <div className="flex items-baseline gap-2">
                     <span className="text-3xl sm:text-4xl font-serif font-bold text-brand-dark">
@@ -361,7 +442,10 @@ export default function BokSalg() {
 
                 <div className="text-left sm:text-right">
                   <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded">
-                    <Check className="w-3.5 h-3.5 text-emerald-600" /> {isAmazon ? 'På lager' : 'På lager for rask sending'}
+                    <Check className="w-3.5 h-3.5 text-emerald-600" />{' '}
+                    {isAmazon
+                      ? (currentLang === 'en' ? 'In stock on Amazon' : 'På lager')
+                      : (currentLang === 'en' ? 'In stock for fast shipping' : 'På lager for rask sending')}
                   </span>
                   <p className="text-[11px] text-stone-500 mt-1">
                     {shippingText}
@@ -369,7 +453,7 @@ export default function BokSalg() {
                 </div>
               </div>
 
-              {/* ACTION BUTTON - DIRECT TO STRIPE OR AMAZON EXTERNAL LINK */}
+              {/* ACTION BUTTONS - PRIMARY (ACTIVE LANGUAGE) + SECONDARY (OTHER LANGUAGE IF BOTH EXIST) */}
               <div className="pt-6 space-y-3">
                 {buyUrl ? (
                   <a
@@ -377,17 +461,42 @@ export default function BokSalg() {
                     target="_blank"
                     rel="noopener noreferrer"
                     id="buy-book-primary-cta"
-                    className="w-full py-4 px-8 bg-brand-dark hover:bg-black text-white font-sans text-sm sm:text-base font-semibold tracking-widest uppercase transition-all duration-200 flex items-center justify-center gap-3 shadow-md hover:shadow-lg active:scale-[0.99] group cursor-pointer"
+                    className={`w-full py-4 px-8 font-sans text-sm sm:text-base font-semibold tracking-widest uppercase transition-all duration-200 flex items-center justify-center gap-3 shadow-md hover:shadow-lg active:scale-[0.99] group cursor-pointer ${
+                      isAmazon
+                        ? 'bg-amber-600 hover:bg-amber-500 text-white'
+                        : 'bg-brand-dark hover:bg-black text-white'
+                    }`}
                   >
                     <ShoppingBag className="w-5 h-5 transition-transform group-hover:scale-110" />
-                    <span>{isAmazon ? 'Kjøp frå Amazon' : 'Kjøp boka no'}</span>
+                    <span>
+                      {isAmazon
+                        ? (currentLang === 'en' ? 'Buy on Amazon' : 'Kjøp frå Amazon')
+                        : (currentLang === 'en' ? 'Buy the book now' : 'Kjøp boka no')}
+                    </span>
                     <ExternalLink className="w-4 h-4 opacity-70 group-hover:opacity-100 transition-opacity" />
                   </a>
                 ) : (
                   <div className="p-4 bg-stone-50 border border-stone-200 rounded text-center text-xs text-stone-600">
                     <AlertCircle className="w-4 h-4 mx-auto text-amber-600 mb-1" />
-                    Kjøpslenkje (Stripe eller Amazon) for denne boka er ikkje lagt inn enno.
+                    {currentLang === 'en'
+                      ? 'Purchase link (Stripe or Amazon) for this book has not been added yet.'
+                      : 'Kjøpslenkje (Stripe eller Amazon) for denne boka er ikkje lagt inn enno.'}
                   </div>
+                )}
+
+                {/* SECONDARY LANGUAGE EDITION BUTTON WHEN BOOK HAS LINKS FOR BOTH NORWEGIAN AND ENGLISH */}
+                {hasBothEditions && secondaryBuyUrl && secondaryLang && (
+                  <a
+                    href={secondaryBuyUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    id="buy-book-secondary-lang-cta"
+                    className="w-full py-3.5 px-6 bg-stone-50 hover:bg-amber-50/70 border border-stone-300 hover:border-amber-500 text-brand-dark font-sans text-xs sm:text-sm font-semibold tracking-wider uppercase transition-all duration-200 flex items-center justify-center gap-2.5 group cursor-pointer"
+                  >
+                    <Globe className="w-4 h-4 text-brand-accent shrink-0" />
+                    <span>{getSecondaryEditionButtonLabel(secondaryLang, secondaryBuyUrl, currentLang)}</span>
+                    <ExternalLink className="w-3.5 h-3.5 opacity-60 group-hover:opacity-100 transition-opacity" />
+                  </a>
                 )}
               </div>
 
@@ -395,23 +504,31 @@ export default function BokSalg() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-6 mt-6 border-t border-stone-100 text-xs text-stone-600">
                 <div className="flex items-center gap-2">
                   <Truck className="w-4 h-4 text-brand-accent shrink-0" />
-                  <span>{isAmazon ? 'Levering frå Amazon' : 'Rask levering rett heim'}</span>
+                  <span>
+                    {isAmazon
+                      ? (currentLang === 'en' ? 'Delivery from Amazon' : 'Levering frå Amazon')
+                      : (currentLang === 'en' ? 'Fast delivery to your home' : 'Rask levering rett heim')}
+                  </span>
                 </div>
                 {isAmazon ? (
                   <div className="flex items-center gap-2">
                     <BookOpen className="w-4 h-4 text-brand-accent shrink-0" />
-                    <span>Originalutgåve</span>
+                    <span>{currentLang === 'en' ? 'English / International edition' : 'Originalutgåve'}</span>
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
                     <PenTool className="w-4 h-4 text-brand-accent shrink-0" />
-                    <span>Signert utgåve utan ekstra kostnad</span>
+                    <span>{currentLang === 'en' ? 'Signed copy at no extra cost' : 'Signert utgåve utan ekstra kostnad'}</span>
                   </div>
                 )}
                 <div className="flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-brand-accent shrink-0" />
                   <span className="font-medium text-stone-800">
-                    {isAmazon ? 'Kjøp frå Amazon' : isStripe ? 'Trygg betaling med Stripe' : 'Trygg og enkel betaling'}
+                    {isAmazon
+                      ? (currentLang === 'en' ? 'Buy from Amazon' : 'Kjøp frå Amazon')
+                      : isStripe
+                        ? (currentLang === 'en' ? 'Secure payment with Stripe' : 'Trygg betaling med Stripe')
+                        : (currentLang === 'en' ? 'Secure & easy payment' : 'Trygg og enkel betaling')}
                   </span>
                 </div>
               </div>
@@ -426,11 +543,16 @@ export default function BokSalg() {
               )}
               {book.pageCount && (
                 <div className="flex items-center gap-1.5">
-                  <FileText className="w-3.5 h-3.5 text-stone-400" /> {book.pageCount} sider
+                  <FileText className="w-3.5 h-3.5 text-stone-400" /> {book.pageCount} {currentLang === 'en' ? 'pages' : 'sider'}
                 </div>
               )}
               <div className="flex items-center gap-1.5">
-                <BookOpen className="w-3.5 h-3.5 text-stone-400" /> Norsk språk
+                <BookOpen className="w-3.5 h-3.5 text-stone-400" />{' '}
+                {hasBothEditions
+                  ? (currentLang === 'en' ? 'Norwegian & English editions' : 'Norsk og engelsk utgåve')
+                  : currentLang === 'en'
+                    ? 'English edition'
+                    : 'Norsk språk'}
               </div>
             </div>
 
@@ -439,14 +561,16 @@ export default function BokSalg() {
       </section>
 
       {/* FEATURED QUOTE / REVIEWS SECTION */}
-      {showReviewsSection && quotes.length > 0 && (
+      {hasLangInfo && showReviewsSection && quotes.length > 0 && (
         <section className="bg-white border-y border-stone-200/70 py-16 px-6 md:px-12">
           <div className="max-w-4xl mx-auto">
             <div className="text-center mb-10">
               <span className="text-[11px] font-sans uppercase tracking-[0.25em] text-brand-accent font-semibold block mb-2">
-                Omtaler & Lesarstemmer
+                {currentLang === 'en' ? 'Reviews & Reader Voices' : 'Omtaler & Lesarstemmer'}
               </span>
-              <h2 className="text-2xl md:text-3xl font-serif text-brand-dark">Kva seier lesarane?</h2>
+              <h2 className="text-2xl md:text-3xl font-serif text-brand-dark">
+                {currentLang === 'en' ? 'What Readers Are Saying' : 'Kva seier lesarane?'}
+              </h2>
             </div>
 
             <div className={`grid ${quotes.length > 1 ? 'md:grid-cols-2' : 'grid-cols-1'} gap-6`}>
@@ -458,7 +582,7 @@ export default function BokSalg() {
                   </p>
                   <div className="pt-4 border-t border-stone-200/50 flex items-center justify-between">
                     <span className="font-sans font-semibold text-xs text-brand-dark uppercase tracking-wider">
-                      {q.author || 'Lesar'}
+                      {q.author || (currentLang === 'en' ? 'Reader' : 'Lesar')}
                     </span>
                     {q.source && (
                       <span className="text-[11px] text-stone-500 italic">
@@ -483,87 +607,124 @@ export default function BokSalg() {
       {/* STORY & BOOK DETAILS (TEKST LENGER NED) */}
       <section className="py-20 px-6 md:px-12 max-w-4xl mx-auto">
         
-        {/* OM BOKA */}
-        <div className="mb-16">
-          <div className="text-center mb-10">
-            <span className="text-[11px] font-sans uppercase tracking-[0.25em] text-brand-accent font-semibold block mb-2">
-              Handling & Tematikk
-            </span>
-            <h2 className="text-3xl md:text-4xl font-serif text-brand-dark">Om boka</h2>
-            <div className="w-12 h-px bg-brand-accent mx-auto mt-4" />
-          </div>
-
-          <div className="bg-white border border-stone-200/80 p-8 md:p-12 shadow-sm rounded-sm">
-            <div className="prose prose-lg brand-prose max-w-none font-serif text-stone-800 leading-relaxed whitespace-pre-wrap">
-              {book.promoDescription || book.description}
-            </div>
-
-            {/* HIGHLIGHT BULLET POINTS */}
-            {(() => {
-              const rawHighlights = book.promoHighlights && book.promoHighlights.length > 0
-                ? book.promoHighlights
-                : [
-                    'Innbunden kvalitetsbok med vakkert omslag',
-                    isAmazon ? 'Levering frå Amazon' : 'Sendast rett til di postkasse utan ekstra fraktkostnad'
-                  ];
-              const filteredHighlights = rawHighlights.filter(hl => 
-                !isAmazon || (!hl.toLowerCase().includes('signert') && !hl.toLowerCase().includes('signering'))
-              );
-
-              if (filteredHighlights.length === 0) return null;
-
-              return (
-                <div className="mt-10 pt-8 border-t border-stone-100">
-                  <h3 className="text-sm font-sans uppercase tracking-widest font-semibold text-brand-dark mb-4">
-                    Kva du kan forvente:
-                  </h3>
-                  <ul className="grid sm:grid-cols-2 gap-3.5">
-                    {filteredHighlights.map((hl, i) => (
-                      <li key={i} className="flex items-start gap-2.5 text-sm text-stone-700">
-                        <Check className="w-4 h-4 text-brand-accent shrink-0 mt-0.5" />
-                        <span>{hl}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              );
-            })()}
-          </div>
-        </div>
-
-        {/* UTDRAG / SMÅBIT FRÅ BOKA */}
-        {book.promoExcerpt && (
-          <div className="mb-16">
-            <div className="bg-stone-50 border border-stone-200/90 rounded-sm p-8 md:p-12">
-              <div className="flex items-center justify-between mb-6 pb-4 border-b border-stone-200">
-                <div className="flex items-center gap-2">
-                  <BookOpen className="w-4 h-4 text-brand-accent" />
-                  <h3 className="text-xs uppercase tracking-widest font-semibold text-brand-dark">
-                    Utdrag frå boka
-                  </h3>
-                </div>
-                <button
-                  onClick={() => setReadExcerptOpen(!readExcerptOpen)}
-                  className="text-xs font-semibold text-brand-accent hover:text-brand-dark uppercase tracking-wider flex items-center gap-1"
-                >
-                  {readExcerptOpen ? 'Skjul utdrag' : 'Les utdrag'}
-                  <ChevronDown className={`w-3.5 h-3.5 transform transition-transform ${readExcerptOpen ? 'rotate-180' : ''}`} />
-                </button>
+        {/* OM BOKA OR LANGUAGE UNAVAILABLE INFO BOX */}
+        {hasLangInfo ? (
+          <>
+            <div className="mb-16">
+              <div className="text-center mb-10">
+                <span className="text-[11px] font-sans uppercase tracking-[0.25em] text-brand-accent font-semibold block mb-2">
+                  {currentLang === 'en' ? 'Story & Themes' : 'Handling & Tematikk'}
+                </span>
+                <h2 className="text-3xl md:text-4xl font-serif text-brand-dark">
+                  {currentLang === 'en' ? 'About the Book' : 'Om boka'}
+                </h2>
+                <div className="w-12 h-px bg-brand-accent mx-auto mt-4" />
               </div>
 
-              <div className={`font-serif text-stone-800 leading-relaxed italic text-base md:text-lg whitespace-pre-wrap transition-all ${readExcerptOpen ? '' : 'line-clamp-4'}`}>
-                {book.promoExcerpt}
-              </div>
+              <div className="bg-white border border-stone-200/80 p-8 md:p-12 shadow-sm rounded-sm">
+                <div className="prose prose-lg brand-prose max-w-none font-serif text-stone-800 leading-relaxed whitespace-pre-wrap">
+                  {displayDescription}
+                </div>
 
-              {!readExcerptOpen && (
-                <button
-                  onClick={() => setReadExcerptOpen(true)}
-                  className="mt-4 text-xs font-semibold text-brand-dark hover:text-brand-accent underline underline-offset-4 uppercase tracking-wider"
-                >
-                  Klikk for å lese heile utdraget &rarr;
-                </button>
-              )}
+                {/* HIGHLIGHT BULLET POINTS */}
+                {(() => {
+                  const rawHighlights = currentLang === 'en'
+                    ? (book.promoHighlightsEn && book.promoHighlightsEn.length > 0
+                        ? book.promoHighlightsEn
+                        : [
+                            'High-quality edition with carefully crafted design',
+                            isAmazon ? 'Worldwide delivery from Amazon' : 'Shipped directly to your mailbox with free delivery'
+                          ])
+                    : (book.promoHighlights && book.promoHighlights.length > 0
+                        ? book.promoHighlights
+                        : [
+                            'Innbunden kvalitetsbok med vakkert omslag',
+                            isAmazon ? 'Levering frå Amazon' : 'Sendast rett til di postkasse utan ekstra fraktkostnad'
+                          ]);
+                  const filteredHighlights = rawHighlights.filter(hl => 
+                    !isAmazon || (!hl.toLowerCase().includes('signert') && !hl.toLowerCase().includes('signering') && !hl.toLowerCase().includes('signed'))
+                  );
+
+                  if (filteredHighlights.length === 0) return null;
+
+                  return (
+                    <div className="mt-10 pt-8 border-t border-stone-100">
+                      <h3 className="text-sm font-sans uppercase tracking-widest font-semibold text-brand-dark mb-4">
+                        {currentLang === 'en' ? 'What to expect:' : 'Kva du kan forvente:'}
+                      </h3>
+                      <ul className="grid sm:grid-cols-2 gap-3.5">
+                        {filteredHighlights.map((hl, i) => (
+                          <li key={i} className="flex items-start gap-2.5 text-sm text-stone-700">
+                            <Check className="w-4 h-4 text-brand-accent shrink-0 mt-0.5" />
+                            <span>{hl}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })()}
+              </div>
             </div>
+
+            {/* UTDRAG / SMÅBIT FRÅ BOKA */}
+            {displayExcerpt && (
+              <div className="mb-16">
+                <div className="bg-stone-50 border border-stone-200/90 rounded-sm p-8 md:p-12">
+                  <div className="flex items-center justify-between mb-6 pb-4 border-b border-stone-200">
+                    <div className="flex items-center gap-2">
+                      <BookOpen className="w-4 h-4 text-brand-accent" />
+                      <h3 className="text-xs uppercase tracking-widest font-semibold text-brand-dark">
+                        {currentLang === 'en' ? 'Book Excerpt' : 'Utdrag frå boka'}
+                      </h3>
+                    </div>
+                    <button
+                      onClick={() => setReadExcerptOpen(!readExcerptOpen)}
+                      className="text-xs font-semibold text-brand-accent hover:text-brand-dark uppercase tracking-wider flex items-center gap-1"
+                    >
+                      {readExcerptOpen
+                        ? (currentLang === 'en' ? 'Hide excerpt' : 'Skjul utdrag')
+                        : (currentLang === 'en' ? 'Read excerpt' : 'Les utdrag')}
+                      <ChevronDown className={`w-3.5 h-3.5 transform transition-transform ${readExcerptOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                  </div>
+
+                  <div className={`font-serif text-stone-800 leading-relaxed italic text-base md:text-lg whitespace-pre-wrap transition-all ${readExcerptOpen ? '' : 'line-clamp-4'}`}>
+                    {displayExcerpt}
+                  </div>
+
+                  {!readExcerptOpen && (
+                    <button
+                      onClick={() => setReadExcerptOpen(true)}
+                      className="mt-4 text-xs font-semibold text-brand-dark hover:text-brand-accent underline underline-offset-4 uppercase tracking-wider"
+                    >
+                      {currentLang === 'en' ? 'Click to read full excerpt →' : 'Klikk for å lese heile utdraget →'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="mb-16 bg-amber-50/90 border border-amber-200 rounded-sm p-8 md:p-10 text-center shadow-sm">
+            <Globe className="w-10 h-10 text-amber-700 mx-auto mb-3" />
+            <h2 className="text-2xl font-serif text-brand-dark mb-2">
+              {currentLang === 'en'
+                ? 'Not all information is available in English'
+                : 'Ikkje all informasjon er tilgjengeleg på norsk'}
+            </h2>
+            <p className="text-sm text-stone-700 max-w-lg mx-auto mb-6 leading-relaxed">
+              {currentLang === 'en'
+                ? 'Detailed descriptions and excerpts for this book have not been added in English yet. Switch the website language to Norwegian to read all information about this book.'
+                : 'Utdjupande omtale og utdrag for denne boka er ikkje lagt inn på norsk enno. Byt nettsidespråk til engelsk for å lese all informasjon om boka.'}
+            </p>
+            <button
+              type="button"
+              onClick={() => setLanguage(currentLang === 'en' ? 'no' : 'en')}
+              className="px-6 py-3 bg-brand-dark hover:bg-black text-white text-xs font-semibold tracking-widest uppercase rounded-sm transition-colors inline-flex items-center gap-2 cursor-pointer"
+            >
+              <Globe className="w-4 h-4 text-amber-400" />
+              <span>{currentLang === 'en' ? 'Switch to Norwegian (Norsk)' : 'Byt til engelsk (English)'}</span>
+            </button>
           </div>
         )}
 
@@ -579,24 +740,40 @@ export default function BokSalg() {
             </div>
             <div className="flex-1 min-w-0">
               <span className="text-[11px] font-sans uppercase tracking-widest text-brand-accent font-semibold block mb-1">
-                Forfattaren
+                {currentLang === 'en' ? 'The Author' : 'Forfattaren'}
               </span>
               <h3 className="text-2xl font-serif text-brand-dark mb-3">Øivind H. Solheim</h3>
               
               {/* BIO CONTENT DIRECT FROM SETTINGS/ABOUT */}
               <div className="font-serif text-stone-700 leading-relaxed text-sm md:text-base mb-4 space-y-3">
-                {aboutData?.shortBioNo ? (
-                  <p>{aboutData.shortBioNo}</p>
-                ) : aboutData?.bioNo ? (
-                  <div className="markdown-body line-clamp-5">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {aboutData.bioNo}
-                    </ReactMarkdown>
-                  </div>
+                {currentLang === 'en' ? (
+                  aboutData?.shortBioEn ? (
+                    <p>{aboutData.shortBioEn}</p>
+                  ) : aboutData?.bioEn ? (
+                    <div className="markdown-body line-clamp-5">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {aboutData.bioEn}
+                      </ReactMarkdown>
+                    </div>
+                  ) : (
+                    <p>
+                      Øivind H. Solheim is an author, writer, and photographer. Through novels, short stories, and personal reflections, he explores human relationships, the passage of time, and the intersection between tradition and modern society.
+                    </p>
+                  )
                 ) : (
-                  <p>
-                    Øivind H. Solheim er forfattar, skribent og fotograf. Gjennom romanar, noveller og personlege refleksjonar utforskar han menneskelege relasjonar, tidas gang og møtet mellom tradisjon og det moderne samfunnet.
-                  </p>
+                  aboutData?.shortBioNo ? (
+                    <p>{aboutData.shortBioNo}</p>
+                  ) : aboutData?.bioNo ? (
+                    <div className="markdown-body line-clamp-5">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {aboutData.bioNo}
+                      </ReactMarkdown>
+                    </div>
+                  ) : (
+                    <p>
+                      Øivind H. Solheim er forfattar, skribent og fotograf. Gjennom romanar, noveller og personlege refleksjonar utforskar han menneskelege relasjonar, tidas gang og møtet mellom tradisjon og det moderne samfunnet.
+                    </p>
+                  )
                 )}
               </div>
 
@@ -604,7 +781,7 @@ export default function BokSalg() {
                 to="/om-meg"
                 className="text-xs font-semibold text-brand-dark hover:text-brand-accent tracking-widest uppercase inline-flex items-center gap-1 group"
               >
-                <span>Les meir på «Om meg»-sida</span>
+                <span>{currentLang === 'en' ? 'Read more on the "About" page' : 'Les meir på «Om meg»-sida'}</span>
                 <span className="transition-transform group-hover:translate-x-1">&rarr;</span>
               </Link>
             </div>
@@ -615,18 +792,26 @@ export default function BokSalg() {
         <div className="bg-brand-dark text-white p-8 md:p-14 rounded-sm shadow-xl text-center relative overflow-hidden">
           <div className="max-w-2xl mx-auto relative z-10">
             <span className="text-xs uppercase tracking-[0.25em] text-brand-accent font-semibold block mb-3">
-              {isAmazon ? 'Tilgjengeleg på Amazon' : 'Direkte frå forfattaren'}
+              {isAmazon
+                ? (currentLang === 'en' ? 'Available on Amazon' : 'Tilgjengeleg på Amazon')
+                : (currentLang === 'en' ? 'Direct from the author' : 'Direkte frå forfattaren')}
             </span>
             <h2 className="text-3xl md:text-5xl font-serif mb-4 leading-tight">
-              Sikre deg eit eksemplar av {book.title}
+              {currentLang === 'en'
+                ? `Get your copy of ${displayTitle}`
+                : `Sikre deg eit eksemplar av ${displayTitle}`}
             </h2>
             <p className="text-stone-300 font-serif text-base md:text-lg mb-8 max-w-xl mx-auto leading-relaxed">
               {isAmazon
-                ? 'Bestill boka enkelt og trygt på Amazon med levering rett heim til deg.'
-                : 'Moglegheit for signert utgåve med personleg helsing – heilt utan ekstra kostnad. Boka vert pakka og sendt rett heim i postkassa di.'}
+                ? (currentLang === 'en'
+                    ? 'Order the book easily and securely on Amazon with delivery straight to your door.'
+                    : 'Bestill boka enkelt og trygt på Amazon med levering rett heim til deg.')
+                : (currentLang === 'en'
+                    ? 'Optional signed copy with a personal note at no extra cost. Packed and shipped directly to your mailbox.'
+                    : 'Moglegheit for signert utgåve med personleg helsing – heilt utan ekstra kostnad. Boka vert pakka og sendt rett heim i postkassa di.')}
             </p>
 
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <div className="flex flex-col sm:flex-row flex-wrap items-center justify-center gap-4">
               {buyUrl ? (
                 <a
                   href={buyUrl}
@@ -635,25 +820,48 @@ export default function BokSalg() {
                   className="w-full sm:w-auto px-10 py-4 bg-brand-accent hover:bg-amber-600 text-brand-dark hover:text-white font-sans text-sm font-semibold tracking-widest uppercase transition-all duration-200 shadow-lg cursor-pointer flex items-center justify-center gap-2"
                 >
                   <ShoppingBag className="w-4 h-4" />
-                  <span>{isAmazon ? 'Kjøp frå Amazon' : `Kjøp boka (kr ${effectivePrice},-)`}</span>
+                  <span>
+                    {isAmazon
+                      ? (currentLang === 'en' ? 'Buy on Amazon' : 'Kjøp frå Amazon')
+                      : (currentLang === 'en' ? `Buy the book (kr ${effectivePrice},-)` : `Kjøp boka (kr ${effectivePrice},-)`)}
+                  </span>
                   <ExternalLink className="w-4 h-4 opacity-75" />
                 </a>
               ) : (
                 <span className="px-8 py-4 bg-stone-800 text-stone-400 font-sans text-xs uppercase tracking-wider">
-                  Kjøpslenkje kjem snart
+                  {currentLang === 'en' ? 'Purchase link coming soon' : 'Kjøpslenkje kjem snart'}
                 </span>
+              )}
+
+              {hasBothEditions && secondaryBuyUrl && secondaryLang && (
+                <a
+                  href={secondaryBuyUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full sm:w-auto px-7 py-4 bg-white/10 hover:bg-white/20 border border-white/35 text-white font-sans text-xs font-semibold tracking-widest uppercase transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Globe className="w-4 h-4 text-amber-400" />
+                  <span>{getSecondaryEditionButtonLabel(secondaryLang, secondaryBuyUrl, currentLang)}</span>
+                  <ExternalLink className="w-3.5 h-3.5 opacity-75" />
+                </a>
               )}
 
               <Link
                 to="/boker"
                 className="w-full sm:w-auto px-8 py-4 border border-white/30 hover:border-white text-white font-sans text-xs font-semibold tracking-widest uppercase transition-colors"
               >
-                Sjå andre bøker
+                {currentLang === 'en' ? 'See other books' : 'Sjå andre bøker'}
               </Link>
             </div>
 
             <p className="text-stone-400 text-xs mt-6">
-              {shippingText} • {isAmazon ? 'Kjøp trygt frå Amazon' : isStripe ? 'Trygg betaling med Stripe' : 'Trygg betaling'} • {isAmazon ? 'Levering frå Amazon' : 'Rask utsending'}
+              {shippingText} •{' '}
+              {isAmazon
+                ? (currentLang === 'en' ? 'Secure checkout on Amazon' : 'Kjøp trygt frå Amazon')
+                : isStripe
+                  ? (currentLang === 'en' ? 'Secure payment with Stripe' : 'Trygg betaling med Stripe')
+                  : (currentLang === 'en' ? 'Secure payment' : 'Trygg betaling')}{' '}
+              • {isAmazon ? (currentLang === 'en' ? 'Delivery from Amazon' : 'Levering frå Amazon') : (currentLang === 'en' ? 'Fast dispatch' : 'Rask utsending')}
             </p>
           </div>
         </div>
@@ -668,42 +876,55 @@ export default function BokSalg() {
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 80, opacity: 0 }}
             transition={{ duration: 0.3 }}
-            className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-stone-200 shadow-2xl p-3 md:px-8 z-50 flex items-center justify-between"
+            className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-stone-200 shadow-2xl p-3 md:px-8 z-50 flex items-center justify-between gap-2"
           >
-            <div className="flex items-center gap-3 min-w-0 pr-3">
+            <div className="flex items-center gap-3 min-w-0 pr-2">
               {book.coverImageUrl && (
                 <img
                   src={book.coverImageUrl}
-                  alt={book.title}
+                  alt={displayTitle}
                   className="w-9 h-12 object-cover rounded-sm border border-stone-200 shrink-0 hidden sm:block"
                 />
               )}
               <div className="min-w-0">
                 <h4 className="font-serif font-bold text-sm text-brand-dark truncate">
-                  {book.title}
+                  {displayTitle}
                 </h4>
                 <p className="text-[11px] text-stone-500 truncate">
-                  kr {effectivePrice},- • {isAmazon ? 'Levering frå Amazon' : 'Fri frakt'}
+                  kr {effectivePrice},- • {isAmazon ? (currentLang === 'en' ? 'Delivery from Amazon' : 'Levering frå Amazon') : (currentLang === 'en' ? 'Free shipping' : 'Fri frakt')}
                 </p>
               </div>
             </div>
 
-            {buyUrl ? (
-              <a
-                href={buyUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-6 py-3 bg-brand-dark hover:bg-black text-white text-xs font-semibold tracking-widest uppercase transition-colors shrink-0 flex items-center gap-1.5 shadow-sm"
-              >
-                <ShoppingBag className="w-3.5 h-3.5" />
-                <span>{isAmazon ? 'Kjøp frå Amazon' : 'Kjøp no'}</span>
-                <ExternalLink className="w-3 h-3 opacity-70" />
-              </a>
-            ) : (
-              <span className="px-4 py-2 text-xs text-stone-500 bg-stone-100 rounded">
-                Kjøp
-              </span>
-            )}
+            <div className="flex items-center gap-2 shrink-0">
+              {hasBothEditions && secondaryBuyUrl && secondaryLang && (
+                <a
+                  href={secondaryBuyUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hidden md:inline-flex px-4 py-3 border border-stone-300 hover:border-brand-dark text-brand-dark text-xs font-semibold tracking-wider uppercase transition-colors items-center gap-1.5"
+                >
+                  <Globe className="w-3.5 h-3.5 text-brand-accent" />
+                  <span>{getSecondaryEditionButtonLabel(secondaryLang, secondaryBuyUrl, currentLang)}</span>
+                </a>
+              )}
+              {buyUrl ? (
+                <a
+                  href={buyUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-6 py-3 bg-brand-dark hover:bg-black text-white text-xs font-semibold tracking-widest uppercase transition-colors shrink-0 flex items-center gap-1.5 shadow-sm"
+                >
+                  <ShoppingBag className="w-3.5 h-3.5" />
+                  <span>{isAmazon ? (currentLang === 'en' ? 'Buy on Amazon' : 'Kjøp frå Amazon') : (currentLang === 'en' ? 'Buy now' : 'Kjøp no')}</span>
+                  <ExternalLink className="w-3 h-3 opacity-70" />
+                </a>
+              ) : (
+                <span className="px-4 py-2 text-xs text-stone-500 bg-stone-100 rounded">
+                  {currentLang === 'en' ? 'Buy' : 'Kjøp'}
+                </span>
+              )}
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

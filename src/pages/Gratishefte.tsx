@@ -20,7 +20,7 @@ import { collection, query } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { getCachedDocs } from '../lib/dbCache';
 import { Book } from '../types';
-import { slugify } from '../lib/utils';
+import { slugify, getBuyLinkType } from '../lib/utils';
 import { useLanguage } from '../context/LanguageContext';
 import { MiniPdf } from '../lib/miniPdf';
 
@@ -871,8 +871,10 @@ export default function Gratishefte() {
   // Resolve book link for Page 8 CTA & Buy Book CTA
   const bookUrl = (() => {
     if (currentLang === 'en') {
-      if (tenkSjolvBook?.buyLinkEn) return { href: tenkSjolvBook.buyLinkEn, external: true };
-      if (tenkSjolvBook?.buyLink && tenkSjolvBook.buyLink.includes('amazon')) return { href: tenkSjolvBook.buyLink, external: true };
+      if (tenkSjolvBook?.buyLinkEn?.trim()) return { href: tenkSjolvBook.buyLinkEn.trim(), external: true };
+      if (tenkSjolvBook?.buyLink && getBuyLinkType(tenkSjolvBook.buyLink) === 'amazon') {
+        return { href: tenkSjolvBook.buyLink.trim(), external: true };
+      }
       return { href: content.summary.ctaUrl, external: true };
     }
     if (tenkSjolvBook) {
@@ -884,15 +886,23 @@ export default function Gratishefte() {
 
   const directBuyUrl = (() => {
     if (currentLang === 'en') {
-      if (tenkSjolvBook?.buyLinkEn) return { href: tenkSjolvBook.buyLinkEn, external: true };
-      if (tenkSjolvBook?.buyLink) return { href: tenkSjolvBook.buyLink, external: true };
+      if (tenkSjolvBook?.buyLinkEn?.trim()) {
+        return { href: tenkSjolvBook.buyLinkEn.trim(), external: true };
+      }
+      if (tenkSjolvBook?.buyLink && getBuyLinkType(tenkSjolvBook.buyLink) === 'amazon') {
+        return { href: tenkSjolvBook.buyLink.trim(), external: true };
+      }
       return { href: content.summary.ctaUrl, external: true };
     }
-    if (tenkSjolvBook?.buyLink) {
-      return { href: tenkSjolvBook.buyLink, external: true };
+    if (tenkSjolvBook?.buyLink?.trim()) {
+      return { href: tenkSjolvBook.buyLink.trim(), external: true };
     }
     return bookUrl;
   })();
+
+  const readMorePath = tenkSjolvBook
+    ? `/salg/${tenkSjolvBook.promoSlug || slugify(tenkSjolvBook.title)}`
+    : '/boker';
 
   // Keyboard navigation in flip mode
   useEffect(() => {
@@ -1335,7 +1345,11 @@ export default function Gratishefte() {
                       className="px-5 py-3 bg-[#B58442] hover:bg-[#c8934b] text-white font-sans text-xs font-bold tracking-wider uppercase rounded transition-all shadow-md inline-flex items-center gap-2"
                     >
                       <ShoppingBag className="w-3.5 h-3.5" />
-                      <span>{currentLang === 'en' ? 'Buy the book' : 'Kjøp boka'}</span>
+                      <span>
+                        {currentLang === 'en'
+                          ? (getBuyLinkType(directBuyUrl.href) === 'amazon' ? 'Buy on Amazon' : 'Buy the book')
+                          : 'Kjøp boka'}
+                      </span>
                     </a>
                   ) : (
                     <Link
@@ -1347,15 +1361,13 @@ export default function Gratishefte() {
                     </Link>
                   )}
 
-                  {!bookUrl.external && (
-                    <Link
-                      to={bookUrl.href}
-                      className="px-4 py-3 bg-white/10 hover:bg-white/15 border border-white/20 text-white font-sans text-xs font-semibold tracking-wider uppercase rounded transition-all inline-flex items-center gap-1.5"
-                    >
-                      <BookOpen className="w-3.5 h-3.5" />
-                      <span>{currentLang === 'en' ? 'Read more' : 'Les meir'}</span>
-                    </Link>
-                  )}
+                  <Link
+                    to={readMorePath}
+                    className="px-4 py-3 bg-white/10 hover:bg-white/15 border border-white/20 text-white font-sans text-xs font-semibold tracking-wider uppercase rounded transition-all inline-flex items-center gap-1.5"
+                  >
+                    <BookOpen className="w-3.5 h-3.5" />
+                    <span>{currentLang === 'en' ? 'Read more' : 'Les meir'}</span>
+                  </Link>
                 </div>
               </div>
             </div>
@@ -1700,7 +1712,11 @@ export default function Gratishefte() {
                 className="px-6 py-3.5 bg-[#B58442] hover:bg-[#c6924b] text-white text-xs font-bold uppercase tracking-wider rounded inline-flex items-center gap-2 transition-colors shadow-lg"
               >
                 <ShoppingBag className="w-4 h-4" />
-                <span>{currentLang === 'en' ? 'Buy the book' : 'Kjøp boka'}</span>
+                <span>
+                  {currentLang === 'en'
+                    ? (getBuyLinkType(directBuyUrl.href) === 'amazon' ? 'Buy on Amazon' : 'Buy the book')
+                    : 'Kjøp boka'}
+                </span>
               </a>
             ) : (
               <Link
@@ -1711,15 +1727,13 @@ export default function Gratishefte() {
                 <span>{currentLang === 'en' ? 'Buy the book' : 'Kjøp boka'}</span>
               </Link>
             )}
-            {!bookUrl.external && (
-              <Link
-                to={bookUrl.href}
-                className="px-5 py-3.5 bg-white/10 hover:bg-white/15 border border-white/25 text-white text-xs font-bold uppercase tracking-wider rounded inline-flex items-center gap-2 transition-colors"
-              >
-                <BookOpen className="w-4 h-4" />
-                <span>{currentLang === 'en' ? 'Read more' : 'Les meir om boka'}</span>
-              </Link>
-            )}
+            <Link
+              to={readMorePath}
+              className="px-5 py-3.5 bg-white/10 hover:bg-white/15 border border-white/25 text-white text-xs font-bold uppercase tracking-wider rounded inline-flex items-center gap-2 transition-colors"
+            >
+              <BookOpen className="w-4 h-4" />
+              <span>{currentLang === 'en' ? 'Read more' : 'Les meir om boka'}</span>
+            </Link>
             <button
               type="button"
               onClick={() => generateBookletPdf(currentLang)}

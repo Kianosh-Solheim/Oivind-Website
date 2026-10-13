@@ -19,7 +19,7 @@ export interface Book {
   buyLinkEn?: string;
   price?: number;
   
-  // Bokpromosjon og Salgsside-innstillingar:
+  // Bokpromosjon og Salgsside-innstillingar (Norsk):
   promoActive?: boolean;
   promoSlug?: string;          // e.g. "navnet-pa-boken" -> /salg/navnet-pa-boken
   promoHeadline?: string;      // Hero-ingress / slagord
@@ -32,6 +32,17 @@ export interface Book {
   promoSpecialPrice?: number;  // Kampanjepris
   promoShippingText?: string;  // Fraktinformasjon (f.eks. "Fri frakt rett i postkassa di")
   authorNote?: string;         // Personleg helsing frå forfattaren
+
+  // Språkspesifikke felt for Engelsk (English edition):
+  promoHeadlineEn?: string;
+  promoBadgeEn?: string;
+  promoDescriptionEn?: string;
+  promoExcerptEn?: string;
+  promoHighlightsEn?: string[];
+  promoQuotesEn?: BookQuote[];
+  promoShippingTextEn?: string;
+  authorNoteEn?: string;
+
   isHeroFocus?: boolean;       // Hovudfokus på framsida (erstattar vanleg hero)
   showReviews?: boolean;       // Om omtaler og «Kva seier lesarane?» skal visast
   showPromoQuotes?: boolean;   // Alias for showReviews

@@ -1,20 +1,20 @@
-import { useState, useEffect } from 'react';
-import { ArrowRight, BookOpen, ShoppingBag, CreditCard, Sparkles, ExternalLink, Truck, FileText } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { ArrowRight, BookOpen, ShoppingBag, CreditCard, Sparkles, ExternalLink, Truck, FileText, Globe } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { collection, query } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { getCachedDocs } from '../lib/dbCache';
 import { Book } from '../types';
-import { slugify, getBuyLinkType } from '../lib/utils';
+import { slugify, resolveBookBuyLinks, isBookAvailableInLanguage, hasBookLanguageInfo } from '../lib/utils';
 import heroImg from '../assets/bilde_framside.jpeg';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../lib/AuthContext';
 
 export default function Home() {
-  const { t, language } = useLanguage();
+  const { t, language, setLanguage } = useLanguage();
   const { isAdmin } = useAuth();
-  const [heroBook, setHeroBook] = useState<Book | null>(null);
+  const [booksList, setBooksList] = useState<Book[]>([]);
 
   useEffect(() => {
     let isMounted = true;
@@ -22,10 +22,9 @@ export default function Home() {
       try {
         const q = query(collection(db, 'books'));
         const snap = await getCachedDocs(q, 'books_all');
-        const booksList = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Book));
-        const focused = booksList.find(b => b.isHeroFocus === true);
+        const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Book));
         if (isMounted) {
-          setHeroBook(focused || null);
+          setBooksList(list);
         }
       } catch (err) {
         console.error('Error loading hero focus book:', err);
@@ -35,6 +34,13 @@ export default function Home() {
     fetchHeroBook();
     return () => { isMounted = false; };
   }, []);
+
+  const currentLang: 'no' | 'en' = language === 'en' ? 'en' : 'no';
+
+  // Only show featured hero book if it is marked isHeroFocus AND has a sales link in the current language
+  const heroBook = useMemo(() => {
+    return booksList.find(b => b.isHeroFocus === true && isBookAvailableInLanguage(b, currentLang)) || null;
+  }, [booksList, currentLang]);
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -47,35 +53,47 @@ export default function Home() {
   };
 
   // Helper values for dynamic book hero if active
-  const rawBuyLink = heroBook 
-    ? ((language === 'en' && heroBook.buyLinkEn) ? heroBook.buyLinkEn : (heroBook.buyLink || ''))
-    : '';
-  const buyLinkType = getBuyLinkType(rawBuyLink);
-  const isAmazon = buyLinkType === 'amazon';
+  const buyLinks = resolveBookBuyLinks(heroBook, currentLang);
+  const rawBuyLink = buyLinks.primaryLink;
+  const buyLinkType = buyLinks.primaryLinkType;
+  const isAmazon = buyLinks.primaryIsAmazon;
+  const hasLangInfo = hasBookLanguageInfo(heroBook, currentLang);
 
   const bookTitle = heroBook 
-    ? ((language === 'en' && heroBook.titleEn) ? heroBook.titleEn : heroBook.title) 
+    ? ((currentLang === 'en' && heroBook.titleEn) ? heroBook.titleEn : heroBook.title) 
     : '';
   const bookDescription = heroBook 
-    ? ((language === 'en' && heroBook.descriptionEn) ? heroBook.descriptionEn : heroBook.description) 
+    ? (currentLang === 'en'
+        ? (heroBook.descriptionEn || heroBook.promoDescriptionEn || (heroBook.language === 'en' ? heroBook.description : ''))
+        : (heroBook.description || heroBook.promoDescription || '')) 
     : '';
+  const bookHeadline = heroBook
+    ? (currentLang === 'en'
+        ? (heroBook.promoHeadlineEn || (heroBook.language === 'en' ? heroBook.promoHeadline : ''))
+        : (heroBook.promoHeadline || ''))
+    : '';
+  const bookQuotes = heroBook
+    ? (currentLang === 'en'
+        ? (heroBook.promoQuotesEn && heroBook.promoQuotesEn.length > 0 ? heroBook.promoQuotesEn : (heroBook.language === 'en' ? heroBook.promoQuotes : []))
+        : (heroBook.promoQuotes || []))
+    : [];
   const displayPrice = heroBook ? (heroBook.promoSpecialPrice || heroBook.price || 0) : 0;
 
   const readMoreUrl = heroBook 
     ? (heroBook.promoSlug ? `/salg/${heroBook.promoSlug}` : (heroBook.title ? `/salg/${slugify(heroBook.title)}` : `/boker`))
     : '/boker';
 
-  let shippingText = heroBook?.promoShippingText || '';
+  let shippingText = currentLang === 'en' ? (heroBook?.promoShippingTextEn || '') : (heroBook?.promoShippingText || '');
   if (isAmazon) {
-    if (!shippingText || shippingText.toLowerCase().includes('post') || shippingText.toLowerCase().includes('rask levering fra amazon')) {
-      shippingText = language === 'en' ? 'In stock • Delivery from Amazon' : 'På lager • Levering frå Amazon';
+    if (!shippingText || shippingText.toLowerCase().includes('post') || shippingText.toLowerCase().includes('rask levering fra amazon') || currentLang === 'en') {
+      shippingText = currentLang === 'en' ? (heroBook?.promoShippingTextEn || 'In stock • Delivery from Amazon') : 'På lager • Levering frå Amazon';
     } else {
       shippingText = shippingText.replace(/rask levering fra amazon/gi, 'levering frå Amazon')
                                  .replace(/rask levering frå amazon/gi, 'levering frå Amazon')
                                  .replace(/på lager for rask sending/gi, 'på lager');
     }
   } else if (!shippingText && heroBook) {
-    shippingText = language === 'en' ? 'Fast delivery • Signed copy available' : 'På lager for rask sending • Signert utgåve';
+    shippingText = currentLang === 'en' ? 'Fast delivery • Signed copy available' : 'På lager for rask sending • Signert utgåve';
   }
 
   return (
@@ -119,14 +137,14 @@ export default function Home() {
                 )}
               </Link>
 
-              {heroBook.promoQuotes && heroBook.promoQuotes.length > 0 && heroBook.promoQuotes[0]?.quote && (
+              {bookQuotes && bookQuotes.length > 0 && bookQuotes[0]?.quote && (
                 <div className="hidden sm:block mt-3 sm:mt-6 text-center max-w-xs sm:max-w-sm px-2 sm:px-4">
                   <p className="text-xs sm:text-sm font-serif italic text-stone-300 line-clamp-2">
-                    «{heroBook.promoQuotes[0].quote}»
+                    «{bookQuotes[0].quote}»
                   </p>
-                  {heroBook.promoQuotes[0].author && (
+                  {bookQuotes[0].author && (
                     <p className="text-[10px] sm:text-[11px] font-sans tracking-wider uppercase text-amber-400/90 mt-0.5 sm:mt-1">
-                      — {heroBook.promoQuotes[0].author}
+                      — {bookQuotes[0].author}
                     </p>
                   )}
                 </div>
@@ -144,7 +162,7 @@ export default function Home() {
               <motion.div variants={itemVariants} className="flex flex-wrap items-center justify-center lg:justify-start gap-2 sm:gap-3">
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 sm:px-3 sm:py-1 bg-amber-400/15 border border-amber-400/30 text-amber-300 text-[10px] sm:text-xs font-semibold tracking-widest uppercase rounded-full">
                   <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-400" />
-                  {heroBook.promoBadge || (isAmazon ? (language === 'en' ? 'Available on Amazon' : 'Kjøp på Amazon') : (language === 'en' ? 'Featured Book' : 'Bok i hovudfokus'))}
+                  {(currentLang === 'en' ? heroBook.promoBadgeEn : heroBook.promoBadge) || (isAmazon ? (currentLang === 'en' ? 'Available on Amazon' : 'Kjøp på Amazon') : (currentLang === 'en' ? 'Featured Book' : 'Bok i hovudfokus'))}
                 </span>
 
                 {shippingText && (
@@ -171,17 +189,41 @@ export default function Home() {
                 {bookTitle}
               </motion.h1>
 
-              {/* Promo headline */}
-              {heroBook.promoHeadline && (
-                <motion.p variants={itemVariants} className="text-sm sm:text-lg md:text-xl lg:text-2xl font-serif italic text-amber-200/95 leading-snug max-w-xl">
-                  «{heroBook.promoHeadline}»
-                </motion.p>
-              )}
+              {hasLangInfo ? (
+                <>
+                  {/* Promo headline */}
+                  {bookHeadline && (
+                    <motion.p variants={itemVariants} className="text-sm sm:text-lg md:text-xl lg:text-2xl font-serif italic text-amber-200/95 leading-snug max-w-xl">
+                      «{bookHeadline}»
+                    </motion.p>
+                  )}
 
-              {/* Description */}
-              <motion.p variants={itemVariants} className="text-xs sm:text-sm md:text-base text-stone-300 font-sans leading-relaxed line-clamp-2 sm:line-clamp-3 md:line-clamp-4 max-w-xl mx-auto lg:mx-0">
-                {bookDescription}
-              </motion.p>
+                  {/* Description */}
+                  {bookDescription && (
+                    <motion.p variants={itemVariants} className="text-xs sm:text-sm md:text-base text-stone-300 font-sans leading-relaxed line-clamp-2 sm:line-clamp-3 md:line-clamp-4 max-w-xl mx-auto lg:mx-0">
+                      {bookDescription}
+                    </motion.p>
+                  )}
+                </>
+              ) : (
+                <motion.div variants={itemVariants} className="bg-white/10 border border-amber-400/30 rounded-sm p-3.5 sm:p-4 max-w-xl text-left flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-2.5 text-xs sm:text-sm text-stone-200">
+                    <Globe className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <span>
+                      {currentLang === 'en'
+                        ? 'Not all information about this book is available in the current website language (English).'
+                        : 'Ikkje all informasjon om denne boka er tilgjengeleg på språket nettsida er på no (norsk).'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setLanguage(currentLang === 'en' ? 'no' : 'en')}
+                    className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-[10px] sm:text-xs uppercase tracking-wider rounded transition-colors shrink-0 cursor-pointer"
+                  >
+                    {currentLang === 'en' ? 'Switch to Norwegian' : 'Byt til engelsk'}
+                  </button>
+                </motion.div>
+              )}
 
               {/* Price */}
               {displayPrice > 0 && (

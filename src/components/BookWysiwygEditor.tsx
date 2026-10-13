@@ -22,10 +22,11 @@ import {
   RotateCcw,
   CheckCircle2,
   Edit2,
-  FileText
+  FileText,
+  Globe
 } from 'lucide-react';
 import { Book, BookQuote } from '../types';
-import { getBuyLinkType, slugify } from '../lib/utils';
+import { getBuyLinkType, slugify, resolveBookBuyLinks, getSecondaryEditionButtonLabel } from '../lib/utils';
 import ImagePickerModal from './ImagePickerModal';
 
 interface BookWysiwygEditorProps {
@@ -164,6 +165,7 @@ export default function BookWysiwygEditor({
 
   // Working Book State
   const [title, setTitle] = useState(book.title || '');
+  const [titleEn, setTitleEn] = useState(book.titleEn || '');
   const [publishedYear, setPublishedYear] = useState<number>(book.publishedYear || new Date().getFullYear());
   const [pageCount, setPageCount] = useState<number | ''>(book.pageCount || '');
   const [price, setPrice] = useState<number>(book.price || 299);
@@ -176,6 +178,7 @@ export default function BookWysiwygEditor({
   const [headline, setHeadline] = useState(book.promoHeadline || 'Ein gripande roman om menneske, val og framtid');
   const [badge, setBadge] = useState(book.promoBadge || 'Aktuell roman');
   const [description, setDescription] = useState(book.promoDescription || book.description || '');
+  const [descriptionEn, setDescriptionEn] = useState(book.descriptionEn || '');
   const [excerpt, setExcerpt] = useState(book.promoExcerpt || '');
   const [authorNote, setAuthorNote] = useState(book.authorNote || '');
   const [showReviews, setShowReviews] = useState(book.showReviews !== false && book.showPromoQuotes !== false);
@@ -195,15 +198,18 @@ export default function BookWysiwygEditor({
         ]
   );
   const [buyLink, setBuyLink] = useState(book.buyLink || '');
+  const [buyLinkEn, setBuyLinkEn] = useState(book.buyLinkEn || '');
   const [slug, setSlug] = useState(book.promoSlug || slugify(book.title) || 'bok');
+  const [previewLang, setPreviewLang] = useState<'no' | 'en'>('no');
 
   // UI state
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [showImagePicker, setShowImagePicker] = useState(false);
 
-  const buyLinkType = getBuyLinkType(buyLink);
-  const isAmazon = buyLinkType === 'amazon';
+  const buyLinks = resolveBookBuyLinks({ buyLink, buyLinkEn }, previewLang);
+  const buyLinkType = buyLinks.primaryLinkType;
+  const isAmazon = buyLinks.primaryIsAmazon;
   const effectivePrice = specialPrice || price || 299;
 
   const handleSave = async () => {
@@ -211,14 +217,19 @@ export default function BookWysiwygEditor({
     setSaveSuccess(false);
 
     try {
+      const effectiveLanguage = (buyLink.trim() && buyLinkEn.trim()) ? 'both' : (book.language || 'no');
       await onSave({
         title: title.trim(),
+        titleEn: titleEn.trim(),
+        descriptionEn: descriptionEn.trim(),
+        language: effectiveLanguage,
         publishedYear: Number(publishedYear) || new Date().getFullYear(),
         pageCount: pageCount ? Number(pageCount) : (null as any),
         price: Number(price) || 299,
         coverImageUrl: coverUrl,
         isHeroFocus: isHeroFocus,
         buyLink: buyLink.trim(),
+        buyLinkEn: buyLinkEn.trim(),
 
         // Promo / landing
         promoActive: true,
@@ -495,6 +506,56 @@ export default function BookWysiwygEditor({
             />
             <span className="text-stone-400">kr</span>
           </div>
+        </div>
+      </div>
+
+      {/* BUY LINKS BAR FOR NORWEGIAN (STRIPE) AND ENGLISH (AMAZON) EDITIONS */}
+      <div className="bg-stone-900 border-b border-stone-800 px-6 py-2.5 flex flex-wrap items-center justify-between gap-3 text-xs">
+        <div className="flex flex-wrap items-center gap-3 flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 flex-1 min-w-[240px]">
+            <span className="text-stone-300 font-semibold whitespace-nowrap">🇳🇴 Norsk lenkje (Stripe):</span>
+            <input
+              type="url"
+              value={buyLink}
+              onChange={(e) => setBuyLink(e.target.value)}
+              placeholder="https://buy.stripe.com/..."
+              className="flex-1 px-2.5 py-1 bg-stone-800 border border-stone-700 focus:border-amber-400 rounded text-stone-100 font-mono text-[11px] outline-none"
+            />
+          </div>
+
+          <div className="flex items-center gap-1.5 flex-1 min-w-[240px]">
+            <span className="text-stone-300 font-semibold whitespace-nowrap">🇬🇧 Engelsk lenkje (Amazon):</span>
+            <input
+              type="url"
+              value={buyLinkEn}
+              onChange={(e) => setBuyLinkEn(e.target.value)}
+              placeholder="https://www.amazon.com/..."
+              className="flex-1 px-2.5 py-1 bg-stone-800 border border-stone-700 focus:border-amber-400 rounded text-stone-100 font-mono text-[11px] outline-none"
+            />
+          </div>
+        </div>
+
+        {/* LANGUAGE PREVIEW SWITCHER */}
+        <div className="flex items-center gap-1.5 bg-stone-950 p-1 rounded border border-stone-800 shrink-0">
+          <span className="text-[10px] text-stone-400 uppercase tracking-wider px-1.5">Førehandsvis språk:</span>
+          <button
+            type="button"
+            onClick={() => setPreviewLang('no')}
+            className={`px-2.5 py-1 rounded text-[11px] font-bold uppercase transition-colors ${
+              previewLang === 'no' ? 'bg-amber-500 text-stone-950' : 'text-stone-400 hover:text-white'
+            }`}
+          >
+            🇳🇴 Norsk
+          </button>
+          <button
+            type="button"
+            onClick={() => setPreviewLang('en')}
+            className={`px-2.5 py-1 rounded text-[11px] font-bold uppercase transition-colors ${
+              previewLang === 'en' ? 'bg-amber-500 text-stone-950' : 'text-stone-400 hover:text-white'
+            }`}
+          >
+            🇬🇧 Engelsk
+          </button>
         </div>
       </div>
 
@@ -842,11 +903,24 @@ export default function BookWysiwygEditor({
 
                       <button
                         type="button"
-                        className="w-full py-3 bg-brand-dark hover:bg-black text-white text-xs font-semibold uppercase tracking-widest rounded transition-colors shadow flex items-center justify-center gap-2"
+                        className={`w-full py-3 text-white text-xs font-semibold uppercase tracking-widest rounded transition-colors shadow flex items-center justify-center gap-2 ${
+                          isAmazon ? 'bg-amber-600 hover:bg-amber-500' : 'bg-brand-dark hover:bg-black'
+                        }`}
                       >
                         <ShoppingBag className="w-4 h-4" />
-                        <span>{isAmazon ? 'Bestill via Amazon' : 'Bestill boka no'}</span>
+                        <span>
+                          {isAmazon
+                            ? (previewLang === 'en' ? 'Buy on Amazon' : 'Bestill via Amazon')
+                            : (previewLang === 'en' ? 'Buy the book now' : 'Bestill boka no')}
+                        </span>
                       </button>
+
+                      {buyLinks.hasBothEditions && buyLinks.secondaryLink && buyLinks.secondaryLang && (
+                        <div className="w-full py-2.5 px-4 bg-stone-50 border border-stone-300 text-brand-dark text-xs font-semibold uppercase tracking-wider rounded flex items-center justify-center gap-2">
+                          <Globe className="w-3.5 h-3.5 text-amber-700" />
+                          <span>{getSecondaryEditionButtonLabel(buyLinks.secondaryLang, buyLinks.secondaryLink, previewLang)}</span>
+                        </div>
+                      )}
                     </div>
 
                     {/* Highlights (Kulepunkt) */}

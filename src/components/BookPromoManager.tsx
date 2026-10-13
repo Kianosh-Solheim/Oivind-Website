@@ -17,7 +17,8 @@ import {
   Truck,
   Eye,
   AlertCircle,
-  MessageSquare
+  MessageSquare,
+  Globe
 } from 'lucide-react';
 import { doc, updateDoc, addDoc, deleteDoc, collection, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -90,6 +91,14 @@ export default function BookPromoManager({
   const [formAuthorNote, setFormAuthorNote] = useState('');
   const [formShowReviews, setFormShowReviews] = useState(true);
   const [formShowFreeBookletButton, setFormShowFreeBookletButton] = useState(true);
+
+  // English language-specific promo fields
+  const [formHeadlineEn, setFormHeadlineEn] = useState('');
+  const [formBadgeEn, setFormBadgeEn] = useState('');
+  const [formShippingTextEn, setFormShippingTextEn] = useState('');
+  const [formExcerptEn, setFormExcerptEn] = useState('');
+  const [formHighlightsEn, setFormHighlightsEn] = useState<string[]>([]);
+  const [formQuotesEn, setFormQuotesEn] = useState<BookQuote[]>([]);
 
   // Target book editing trigger
   useEffect(() => {
@@ -167,6 +176,13 @@ export default function BookPromoManager({
     setFormAuthorNote('');
     setFormShowReviews(true);
     setFormShowFreeBookletButton(true);
+
+    setFormHeadlineEn('');
+    setFormBadgeEn('');
+    setFormShippingTextEn('');
+    setFormExcerptEn('');
+    setFormHighlightsEn([]);
+    setFormQuotesEn([]);
   };
 
   const handleStartEdit = (b: Book) => {
@@ -183,7 +199,7 @@ export default function BookPromoManager({
     setFormLanguage(b.language || 'no');
     setFormTitleEn(b.titleEn || '');
     setFormDescription(b.promoDescription || b.description || '');
-    setFormDescriptionEn(b.descriptionEn || '');
+    setFormDescriptionEn(b.descriptionEn || b.promoDescriptionEn || '');
     setFormBuyLink(b.buyLink || '');
     setFormBuyLinkEn(b.buyLinkEn || '');
     setFormPrice(b.price || 299);
@@ -213,6 +229,13 @@ export default function BookPromoManager({
     setFormAuthorNote(b.authorNote || '');
     setFormShowReviews(b.showReviews !== false && b.showPromoQuotes !== false);
     setFormShowFreeBookletButton(b.showFreeBookletButton !== false);
+
+    setFormHeadlineEn(b.promoHeadlineEn || '');
+    setFormBadgeEn(b.promoBadgeEn || '');
+    setFormShippingTextEn(b.promoShippingTextEn || '');
+    setFormExcerptEn(b.promoExcerptEn || '');
+    setFormHighlightsEn(b.promoHighlightsEn && b.promoHighlightsEn.length > 0 ? [...b.promoHighlightsEn] : []);
+    setFormQuotesEn(b.promoQuotesEn && b.promoQuotesEn.length > 0 ? [...b.promoQuotesEn] : []);
   };
 
   const handleToggleReviews = async (b: Book, e: React.MouseEvent) => {
@@ -309,13 +332,14 @@ export default function BookPromoManager({
 
     try {
       const cleanSlug = slugify(formSlug || formTitle);
+      const effectiveLang = (formBuyLink.trim() && formBuyLinkEn.trim()) ? 'both' : formLanguage;
       const bookPayload: any = {
         title: formTitle.trim(),
         description: formDescription.trim(),
         publishedYear: Number(formPublishedYear) || new Date().getFullYear(),
         pageCount: formPageCount ? Number(formPageCount) : 0,
         isbn: formIsbn.trim(),
-        language: formLanguage,
+        language: effectiveLang,
         titleEn: formTitleEn.trim(),
         descriptionEn: formDescriptionEn.trim(),
         buyLink: formBuyLink.trim(),
@@ -338,6 +362,13 @@ export default function BookPromoManager({
         promoQuotes: formQuotes.filter(q => q.quote.trim() !== ''),
         promoHighlights: formHighlights.filter(h => h.trim() !== ''),
         authorNote: formAuthorNote.trim(),
+        promoHeadlineEn: formHeadlineEn.trim(),
+        promoBadgeEn: formBadgeEn.trim(),
+        promoDescriptionEn: formDescriptionEn.trim(),
+        promoExcerptEn: formExcerptEn.trim(),
+        promoShippingTextEn: formShippingTextEn.trim(),
+        promoHighlightsEn: formHighlightsEn.filter(h => h.trim() !== ''),
+        promoQuotesEn: formQuotesEn.filter(q => q.quote.trim() !== ''),
         updatedAt: serverTimestamp(),
       };
 
@@ -619,29 +650,45 @@ export default function BookPromoManager({
                       )}
                     </div>
 
-                    {/* BUY LINK TYPE STATUS */}
-                    <div className="mt-2 flex items-center gap-1.5 text-xs">
-                      <CreditCard className="w-3.5 h-3.5 text-stone-400 shrink-0" />
-                      {linkType === 'amazon' && (
-                        <span className="text-amber-800 bg-amber-50 border border-amber-300/70 px-2 py-0.5 rounded text-[11px] font-mono truncate max-w-[210px]" title={b.buyLink}>
-                          Amazon: {b.buyLink?.replace(/^https?:\/\//, '')}
-                        </span>
-                      )}
-                      {linkType === 'stripe' && (
-                        <span className="text-emerald-700 bg-emerald-50 border border-emerald-200/70 px-2 py-0.5 rounded text-[11px] font-mono truncate max-w-[210px]" title={b.buyLink}>
-                          Stripe: {b.buyLink?.replace(/^https?:\/\//, '')}
-                        </span>
-                      )}
-                      {linkType === 'other' && b.buyLink && (
-                        <span className="text-stone-700 bg-stone-100 border border-stone-200 px-2 py-0.5 rounded text-[11px] font-mono truncate max-w-[210px]" title={b.buyLink}>
-                          Lenkje: {b.buyLink.replace(/^https?:\/\//, '')}
-                        </span>
-                      )}
-                      {!b.buyLink && (
-                        <span className="text-stone-400 italic text-[11px]">
-                          Ingen kjøpslenkje lagt inn
-                        </span>
-                      )}
+                    {/* BUY LINK TYPE STATUS (NORWEGIAN & ENGLISH) */}
+                    <div className="mt-2 space-y-1 text-xs">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <CreditCard className="w-3.5 h-3.5 text-stone-400 shrink-0" />
+                        {b.buyLink ? (
+                          <span
+                            className={`px-2 py-0.5 rounded text-[11px] font-mono truncate max-w-[220px] border ${
+                              linkType === 'amazon'
+                                ? 'text-amber-800 bg-amber-50 border-amber-300/70'
+                                : linkType === 'stripe'
+                                  ? 'text-emerald-700 bg-emerald-50 border-emerald-200/70'
+                                  : 'text-stone-700 bg-stone-100 border-stone-200'
+                            }`}
+                            title={`Norsk lenkje: ${b.buyLink}`}
+                          >
+                            🇳🇴 NO ({linkType === 'stripe' ? 'Stripe' : linkType === 'amazon' ? 'Amazon' : 'Lenkje'}): {b.buyLink.replace(/^https?:\/\//, '')}
+                          </span>
+                        ) : (
+                          <span className="text-stone-400 italic text-[11px]">
+                            🇳🇴 Ingen norsk kjøpslenkje
+                          </span>
+                        )}
+                      </div>
+
+                      {b.buyLinkEn ? (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <Globe className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                          <span
+                            className={`px-2 py-0.5 rounded text-[11px] font-mono truncate max-w-[220px] border ${
+                              getBuyLinkType(b.buyLinkEn) === 'amazon'
+                                ? 'text-amber-800 bg-amber-50 border-amber-300/70'
+                                : 'text-blue-800 bg-blue-50 border-blue-200/70'
+                            }`}
+                            title={`Engelsk lenkje: ${b.buyLinkEn}`}
+                          >
+                            🇬🇧 EN ({getBuyLinkType(b.buyLinkEn) === 'amazon' ? 'Amazon' : getBuyLinkType(b.buyLinkEn) === 'stripe' ? 'Stripe' : 'Link'}): {b.buyLinkEn.replace(/^https?:\/\//, '')}
+                          </span>
+                        </div>
+                      ) : null}
                     </div>
 
                     {/* REVIEWS VISIBILITY BADGE / TOGGLE */}
@@ -1004,68 +1051,219 @@ export default function BookPromoManager({
                 </div>
               </div>
 
-              {/* SECTION: ENGELSK INNHOLD (dersom 'en' eller 'both') */}
-              {(formLanguage === 'en' || formLanguage === 'both') && (
-                <div className="p-4 bg-stone-50 border border-stone-200 rounded space-y-4">
-                  <div className="border-b border-stone-200 pb-1">
-                    <h4 className="font-serif font-bold text-sm text-brand-dark">Engelsk innhald (English version)</h4>
+              {/* SECTION: SPRÅKSPESIFIKK INFORMASJON PÅ ENGELSK (tilgjengeleg på alle bøker) */}
+              <div className="p-4 bg-stone-50 border border-stone-200 rounded space-y-4">
+                <div className="border-b border-stone-200 pb-2 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h4 className="font-serif font-bold text-sm text-brand-dark flex items-center gap-1.5">
+                      <Globe className="w-4 h-4 text-brand-accent" />
+                      <span>Språkspesifikk informasjon – Engelsk (English Edition)</span>
+                    </h4>
+                    <p className="text-[11px] text-stone-500 mt-0.5">
+                      Visast når besøkande byter språket på nettsida til engelsk. Dersom ingenting er lagt til her, visast ein infoboks med knapp for å byte språk.
+                    </p>
                   </div>
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-stone-500 bg-white px-2.5 py-1 border border-stone-200 rounded">
+                    🇬🇧 English Info
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block font-semibold uppercase tracking-wider text-brand-dark text-[11px] mb-1">
-                      Title (English)
+                      Boktittel på engelsk (Title in English)
                     </label>
                     <input
                       type="text"
                       value={formTitleEn}
                       onChange={(e) => setFormTitleEn(e.target.value)}
-                      placeholder="Book title in English"
+                      placeholder="F.eks. Think for Yourself!"
                       className="w-full p-2.5 border border-stone-300 focus:border-brand-dark outline-none bg-white"
                     />
                   </div>
                   <div>
                     <label className="block font-semibold uppercase tracking-wider text-brand-dark text-[11px] mb-1">
-                      Description (English)
+                      Slagord / Hero-ingress på engelsk (Headline)
                     </label>
-                    <textarea
-                      rows={3}
-                      value={formDescriptionEn}
-                      onChange={(e) => setFormDescriptionEn(e.target.value)}
-                      placeholder="English description or synopsis..."
-                      className="w-full p-2.5 border border-stone-300 focus:border-brand-dark outline-none bg-white font-serif"
+                    <input
+                      type="text"
+                      value={formHeadlineEn}
+                      onChange={(e) => setFormHeadlineEn(e.target.value)}
+                      placeholder="F.eks. A compelling book about critical thinking..."
+                      className="w-full p-2.5 border border-stone-300 focus:border-brand-dark outline-none bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block font-semibold uppercase tracking-wider text-brand-dark text-[11px] mb-1">
+                      Merke / Badge på engelsk
+                    </label>
+                    <input
+                      type="text"
+                      value={formBadgeEn}
+                      onChange={(e) => setFormBadgeEn(e.target.value)}
+                      placeholder="F.eks. Available on Amazon / English Edition"
+                      className="w-full p-2.5 border border-stone-300 focus:border-brand-dark outline-none bg-white"
                     />
                   </div>
                   <div>
                     <label className="block font-semibold uppercase tracking-wider text-brand-dark text-[11px] mb-1">
-                      English Buy / Amazon link (Optional)
+                      Frakt-tekst på engelsk (Shipping text)
                     </label>
                     <input
-                      type="url"
-                      value={formBuyLinkEn}
-                      onChange={(e) => setFormBuyLinkEn(e.target.value)}
-                      placeholder="https://amazon.com/... (optional English buy link)"
-                      className="w-full p-2.5 border border-stone-300 focus:border-brand-dark outline-none bg-white font-mono text-xs"
+                      type="text"
+                      value={formShippingTextEn}
+                      onChange={(e) => setFormShippingTextEn(e.target.value)}
+                      placeholder="F.eks. In stock • Delivery from Amazon"
+                      className="w-full p-2.5 border border-stone-300 focus:border-brand-dark outline-none bg-white"
                     />
                   </div>
                 </div>
-              )}
 
-              {/* SECTION: PRIS OG KJØPSLENKJE (STRIPE / AMAZON) */}
+                <div>
+                  <label className="block font-semibold uppercase tracking-wider text-brand-dark text-[11px] mb-1">
+                    Skildring / Om boka på engelsk (Description in English)
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={formDescriptionEn}
+                    onChange={(e) => setFormDescriptionEn(e.target.value)}
+                    placeholder="English description or synopsis..."
+                    className="w-full p-2.5 border border-stone-300 focus:border-brand-dark outline-none bg-white font-serif leading-relaxed"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold uppercase tracking-wider text-brand-dark text-[11px] mb-1">
+                    Utdrag på engelsk (Book Excerpt in English – valfritt)
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={formExcerptEn}
+                    onChange={(e) => setFormExcerptEn(e.target.value)}
+                    placeholder="Optional excerpt from the English edition..."
+                    className="w-full p-2.5 border border-stone-300 focus:border-brand-dark outline-none bg-white font-serif leading-relaxed"
+                  />
+                </div>
+
+                {/* ENGLISH HIGHLIGHTS */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="font-semibold uppercase tracking-wider text-brand-dark text-[11px]">
+                      Kulepunkt på engelsk (Highlights in English – valfritt)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setFormHighlightsEn([...formHighlightsEn, ''])}
+                      className="text-[11px] font-semibold text-brand-accent hover:text-brand-dark flex items-center gap-1"
+                    >
+                      <Plus className="w-3 h-3" /> Legg til engelsk kulepunkt
+                    </button>
+                  </div>
+                  {formHighlightsEn.map((hl, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={hl}
+                        onChange={(e) => {
+                          const next = [...formHighlightsEn];
+                          next[i] = e.target.value;
+                          setFormHighlightsEn(next);
+                        }}
+                        placeholder="E.g. Thought-provoking questions and reflections"
+                        className="flex-grow p-2 border border-stone-300 focus:border-brand-dark outline-none bg-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setFormHighlightsEn(formHighlightsEn.filter((_, idx) => idx !== i))}
+                        className="p-2 text-red-500 hover:text-red-700"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {/* ENGLISH QUOTES */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="font-semibold uppercase tracking-wider text-brand-dark text-[11px]">
+                      Sitater / Omtaler på engelsk (Reviews in English – valfritt)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setFormQuotesEn([...formQuotesEn, { quote: '', author: '', source: '' }])}
+                      className="text-[11px] font-semibold text-brand-accent hover:text-brand-dark flex items-center gap-1"
+                    >
+                      <Plus className="w-3 h-3" /> Legg til engelsk omtale
+                    </button>
+                  </div>
+                  {formQuotesEn.map((q, idx) => (
+                    <div key={idx} className="p-3 bg-white border border-stone-200 rounded space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-mono uppercase text-stone-500">Review #{idx + 1}</span>
+                        <button
+                          type="button"
+                          onClick={() => setFormQuotesEn(formQuotesEn.filter((_, i) => i !== idx))}
+                          className="text-red-500 hover:text-red-700 text-[11px] flex items-center gap-1"
+                        >
+                          <Trash2 className="w-3 h-3" /> Fjern
+                        </button>
+                      </div>
+                      <textarea
+                        rows={2}
+                        value={q.quote}
+                        onChange={(e) => {
+                          const next = [...formQuotesEn];
+                          next[idx] = { ...next[idx], quote: e.target.value };
+                          setFormQuotesEn(next);
+                        }}
+                        placeholder="Review quote in English..."
+                        className="w-full p-2 border border-stone-300 outline-none text-xs font-serif"
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          value={q.author || ''}
+                          onChange={(e) => {
+                            const next = [...formQuotesEn];
+                            next[idx] = { ...next[idx], author: e.target.value };
+                            setFormQuotesEn(next);
+                          }}
+                          placeholder="Name / Author (e.g. Reader)"
+                          className="p-2 border border-stone-300 outline-none text-xs"
+                        />
+                        <input
+                          type="text"
+                          value={q.source || ''}
+                          onChange={(e) => {
+                            const next = [...formQuotesEn];
+                            next[idx] = { ...next[idx], source: e.target.value };
+                            setFormQuotesEn(next);
+                          }}
+                          placeholder="Source (e.g. Amazon Review)"
+                          className="p-2 border border-stone-300 outline-none text-xs"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* SECTION: PRIS OG KJØPSLENKJER FOR NORSK OG ENGELSK UTGÅVE (STRIPE / AMAZON) */}
               <div className="p-4 bg-amber-50/80 border border-amber-200 rounded space-y-4">
-                <div className="border-b border-amber-200/80 pb-1 flex items-center justify-between">
+                <div className="border-b border-amber-200/80 pb-2 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
                     <CreditCard className="w-4 h-4 text-amber-800" />
-                    <h4 className="font-serif font-bold text-sm text-amber-950">Pris & Kjøpslenkje (Stripe eller Amazon)</h4>
+                    <h4 className="font-serif font-bold text-sm text-amber-950">
+                      Pris & Kjøpslenkjer (Norsk og Engelsk utgåve)
+                    </h4>
                   </div>
-                  {formBuyLink && (
-                    <a
-                      href={formBuyLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[11px] font-semibold text-amber-900 hover:text-black flex items-center gap-1 underline"
-                    >
-                      Test kjøpslenkje <ExternalLink className="w-3 h-3" />
-                    </a>
-                  )}
+                  <span className="text-[11px] text-amber-900 bg-amber-100 px-2.5 py-0.5 rounded font-semibold">
+                    Dynamisk bytte etter språk (NO → Norsk lenkje / EN → Engelsk lenkje)
+                  </span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -1095,22 +1293,35 @@ export default function BookPromoManager({
                   </div>
                   <div>
                     <label className="block font-semibold uppercase tracking-wider text-brand-dark text-[11px] mb-1">
-                      Frakt-tekst
+                      Frakt-tekst (Norsk)
                     </label>
                     <input
                       type="text"
                       value={formShippingText}
                       onChange={(e) => setFormShippingText(e.target.value)}
-                      placeholder="F.eks. «Levering frå Amazon»"
+                      placeholder="F.eks. «Fri frakt rett heim i postkassa di»"
                       className="w-full p-2 border border-stone-300 focus:border-brand-dark outline-none bg-white"
                     />
                   </div>
                 </div>
 
-                <div>
-                  <label className="block font-semibold uppercase tracking-wider text-brand-dark text-[11px] mb-1">
-                    Direkte kjøpslenkje (Stripe Checkout eller Amazon-adresse)
-                  </label>
+                {/* NORWEGIAN EDITION BUY LINK */}
+                <div className="p-3.5 bg-white border border-amber-200/90 rounded space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="font-semibold uppercase tracking-wider text-brand-dark text-[11px] flex items-center gap-1.5">
+                      <span>🇳🇴 Kjøpslenkje – Norsk utgåve (f.eks. Stripe)</span>
+                    </label>
+                    {formBuyLink && (
+                      <a
+                        href={formBuyLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[11px] font-semibold text-amber-900 hover:text-black flex items-center gap-1 underline"
+                      >
+                        Test norsk lenkje <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
+                  </div>
                   <input
                     type="url"
                     value={formBuyLink}
@@ -1118,44 +1329,104 @@ export default function BookPromoManager({
                       const val = e.target.value;
                       setFormBuyLink(val);
                       const isAmazon = getBuyLinkType(val) === 'amazon';
-                      if (isAmazon && formShippingText === 'Fri frakt rett heim i postkassa di') {
+                      if (isAmazon && formShippingText === 'Fri frakt rett heim i postkassa di' && !formBuyLinkEn) {
                         setFormShippingText('Levering frå Amazon');
                       }
                     }}
-                    placeholder="https://buy.stripe.com/... eller https://amazon.com/..."
+                    placeholder="https://buy.stripe.com/... (eller anna norsk kjøpslenkje)"
                     className="w-full p-2.5 border border-stone-300 focus:border-brand-dark outline-none bg-white text-xs font-mono"
                   />
-
-                  {/* DYNAMIC LINK DETECTION BADGE */}
                   {(() => {
                     const detectedType = getBuyLinkType(formBuyLink);
-                    if (detectedType === 'amazon') {
+                    if (detectedType === 'stripe') {
                       return (
-                        <div className="mt-2 flex items-center gap-1.5 text-xs text-amber-900 bg-amber-100/90 border border-amber-300/80 px-2.5 py-1.5 rounded">
-                          <span className="font-bold">🛒 Amazon-lenkje oppdaga:</span>
-                          <span>Kjøpsknappen på framsida og salgssida vil ta kunden direkte til Amazon.</span>
+                        <div className="flex items-center gap-1.5 text-[11px] text-emerald-900 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded">
+                          <span className="font-bold">💳 Stripe-lenkje (Norsk):</span>
+                          <span>Brukt som hovudknapp når nettsida visast på norsk (og som «Kjøp boka på norsk» på engelsk salgsside).</span>
                         </div>
                       );
                     }
-                    if (detectedType === 'stripe') {
+                    if (detectedType === 'amazon') {
                       return (
-                        <div className="mt-2 flex items-center gap-1.5 text-xs text-emerald-900 bg-emerald-100/90 border border-emerald-300/80 px-2.5 py-1.5 rounded">
-                          <span className="font-bold">💳 Stripe-lenkje oppdaga:</span>
-                          <span>Kjøpsknappen på framsida og salgssida vil ta kunden direkte til trygg betaling med Stripe.</span>
+                        <div className="flex items-center gap-1.5 text-[11px] text-amber-900 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded">
+                          <span className="font-bold">🛒 Amazon-lenkje (Norsk):</span>
+                          <span>Brukt når nettsida visast på norsk.</span>
                         </div>
                       );
                     }
                     if (formBuyLink.trim()) {
                       return (
-                        <div className="mt-2 flex items-center gap-1.5 text-xs text-stone-700 bg-stone-100 border border-stone-200 px-2.5 py-1.5 rounded">
-                          <span className="font-semibold">🌐 Ekstern kjøpslenkje:</span>
-                          <span>Kjøpsknappen på framsida sender lesaren direkte til denne lenkja.</span>
+                        <div className="flex items-center gap-1.5 text-[11px] text-stone-700 bg-stone-50 border border-stone-200 px-2.5 py-1 rounded">
+                          <span className="font-semibold">🌐 Norsk kjøpslenkje aktiv.</span>
                         </div>
                       );
                     }
                     return null;
                   })()}
                 </div>
+
+                {/* ENGLISH EDITION BUY LINK */}
+                <div className="p-3.5 bg-white border border-amber-200/90 rounded space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="font-semibold uppercase tracking-wider text-brand-dark text-[11px] flex items-center gap-1.5">
+                      <span>🇬🇧 Kjøpslenkje – Engelsk utgåve (f.eks. Amazon)</span>
+                    </label>
+                    {formBuyLinkEn && (
+                      <a
+                        href={formBuyLinkEn}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[11px] font-semibold text-amber-900 hover:text-black flex items-center gap-1 underline"
+                      >
+                        Test engelsk lenkje <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
+                  </div>
+                  <input
+                    type="url"
+                    value={formBuyLinkEn}
+                    onChange={(e) => setFormBuyLinkEn(e.target.value)}
+                    placeholder="https://www.amazon.com/... (eller anna engelsk kjøpslenkje)"
+                    className="w-full p-2.5 border border-stone-300 focus:border-brand-dark outline-none bg-white text-xs font-mono"
+                  />
+                  {(() => {
+                    const detectedTypeEn = getBuyLinkType(formBuyLinkEn);
+                    if (detectedTypeEn === 'amazon') {
+                      return (
+                        <div className="flex items-center gap-1.5 text-[11px] text-amber-900 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded">
+                          <span className="font-bold">🛒 Amazon-lenkje (Engelsk):</span>
+                          <span>Brukt som hovudknapp når nettsida er på engelsk, og gir knappen «Kjøp boka på engelsk (Amazon)» på den norske salgssida!</span>
+                        </div>
+                      );
+                    }
+                    if (detectedTypeEn === 'stripe') {
+                      return (
+                        <div className="flex items-center gap-1.5 text-[11px] text-emerald-900 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded">
+                          <span className="font-bold">💳 Stripe-lenkje (Engelsk):</span>
+                          <span>Brukt når nettsida er på engelsk, og gir knappen «Kjøp boka på engelsk» på den norske salgssida.</span>
+                        </div>
+                      );
+                    }
+                    if (formBuyLinkEn.trim()) {
+                      return (
+                        <div className="flex items-center gap-1.5 text-[11px] text-stone-700 bg-stone-50 border border-stone-200 px-2.5 py-1 rounded">
+                          <span className="font-semibold">🌐 Engelsk kjøpslenkje aktiv:</span>
+                          <span>Gir knappen «Kjøp boka på engelsk» på salgssida og tar lesaren hit når nettsida er på engelsk.</span>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+
+                {formBuyLink.trim() && formBuyLinkEn.trim() && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded text-[11px] text-emerald-900 flex items-start gap-2">
+                    <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>Begge språkutgåver har lenkje!</strong> Kjøpsknappen på framsida, bokhandelen, lesarrettleiinga og salgssida byter no automatisk mellom norsk og engelsk utgåve etter valt språk, og salgssida viser ein eigen knapp for å kjøpe boka på det andre språket.
+                    </span>
+                  </div>
+                )}
               </div>
 
               {/* SECTION: SALGSSIDE & KAMPANJE */}

@@ -16,7 +16,9 @@ import {
   Plus, 
   SlidersHorizontal,
   Package,
-  HeartHandshake
+  HeartHandshake,
+  Globe,
+  AlertCircle
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { db } from '../lib/firebase';
@@ -25,15 +27,24 @@ import { getCachedDocs } from '../lib/dbCache';
 import { useAuth } from '../lib/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { motion, AnimatePresence } from 'motion/react';
-import { slugify, getBuyLinkType } from '../lib/utils';
+import {
+  slugify,
+  getBuyLinkType,
+  resolveBookBuyLinks,
+  getSecondaryEditionButtonLabel,
+  isBookAvailableInLanguage,
+  hasBookLanguageInfo
+} from '../lib/utils';
 import { Book } from '../types';
 
 export default function Romanar() {
   const { user } = useAuth();
-  const { language, t } = useLanguage();
+  const { language, setLanguage, t } = useLanguage();
   const navigate = useNavigate();
   const [books, setBooks] = useState<Book[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const currentLang: 'no' | 'en' = language === 'en' ? 'en' : 'no';
 
   // Filter & Search states
   const [searchTerm, setSearchTerm] = useState('');
@@ -56,27 +67,30 @@ export default function Romanar() {
     fetchBooks();
   }, []);
 
-  // Spotlight book: Either marked with isHeroFocus or latest prominent release
+  // Spotlight book: ONLY if explicitly featured (isHeroFocus or promoActive) AND has a sales link in currentLang
   const spotlightBook = useMemo(() => {
     if (books.length === 0) return null;
-    const heroFocus = books.find(b => b.isHeroFocus);
+    const heroFocus = books.find(b => b.isHeroFocus === true && isBookAvailableInLanguage(b, currentLang));
     if (heroFocus) return heroFocus;
-    const activePromo = books.find(b => b.promoActive);
-    return activePromo || books[0];
-  }, [books]);
+    const activePromo = books.find(b => b.promoActive === true && isBookAvailableInLanguage(b, currentLang));
+    return activePromo || null;
+  }, [books, currentLang]);
 
   // Filtered & Sorted books
   const filteredBooks = useMemo(() => {
     return books.filter(b => {
+      const noLink = (b.buyLink || '').trim();
+      const enLink = (b.buyLinkEn || '').trim();
+
       // Language filter
-      if (langFilter === 'no' && b.language === 'en') return false;
-      if (langFilter === 'en' && b.language === 'no') return false;
+      if (langFilter === 'no' && b.language === 'en' && !noLink) return false;
+      if (langFilter === 'en' && b.language === 'no' && !enLink) return false;
 
       // Platform / Format filter
-      const link = b.buyLink || b.buyLinkEn || '';
-      const type = getBuyLinkType(link);
-      if (formatFilter === 'amazon' && type !== 'amazon') return false;
-      if (formatFilter === 'direct' && type === 'amazon') return false;
+      const hasAmazon = getBuyLinkType(noLink) === 'amazon' || getBuyLinkType(enLink) === 'amazon';
+      const hasDirect = (noLink && getBuyLinkType(noLink) !== 'amazon') || (enLink && getBuyLinkType(enLink) !== 'amazon');
+      if (formatFilter === 'amazon' && !hasAmazon) return false;
+      if (formatFilter === 'direct' && !hasDirect) return false;
 
       // Search term
       if (searchTerm.trim()) {
@@ -200,19 +214,29 @@ export default function Romanar() {
           </div>
 
           {(() => {
-            const rawLink = (language === 'en' && spotlightBook.buyLinkEn) ? spotlightBook.buyLinkEn : (spotlightBook.buyLink || '');
-            const isSpotlightAmazon = getBuyLinkType(rawLink) === 'amazon';
-            const spotlightTitle = (language === 'en' && spotlightBook.titleEn) ? spotlightBook.titleEn : spotlightBook.title;
-            const spotlightDesc = (language === 'en' && spotlightBook.descriptionEn) ? spotlightBook.descriptionEn : (spotlightBook.promoDescription || spotlightBook.description);
+            const buyLinks = resolveBookBuyLinks(spotlightBook, currentLang);
+            const rawLink = buyLinks.primaryLink;
+            const isSpotlightAmazon = buyLinks.primaryIsAmazon;
+            const hasSpotlightLangInfo = hasBookLanguageInfo(spotlightBook, currentLang);
+            const spotlightTitle = (currentLang === 'en' && spotlightBook.titleEn) ? spotlightBook.titleEn : spotlightBook.title;
+            const spotlightDesc = currentLang === 'en'
+              ? (spotlightBook.descriptionEn || spotlightBook.promoDescriptionEn || (spotlightBook.language === 'en' ? (spotlightBook.promoDescription || spotlightBook.description) : ''))
+              : (spotlightBook.promoDescription || spotlightBook.description || '');
+            const spotlightHeadline = currentLang === 'en'
+              ? (spotlightBook.promoHeadlineEn || (spotlightBook.language === 'en' ? spotlightBook.promoHeadline : ''))
+              : (spotlightBook.promoHeadline || '');
+            const spotlightBadge = currentLang === 'en'
+              ? (spotlightBook.promoBadgeEn || (isSpotlightAmazon ? 'Available on Amazon' : 'Featured Release'))
+              : (spotlightBook.promoBadge || (isSpotlightAmazon ? 'Tilgjengeleg på Amazon' : 'Hovudutgjeving'));
             const spotlightPrice = spotlightBook.promoSpecialPrice || spotlightBook.price || 0;
             const spotlightSlug = spotlightBook.promoSlug || slugify(spotlightBook.title);
             const detailUrl = spotlightBook.promoSlug ? `/salg/${spotlightSlug}` : `/boker/${spotlightBook.id}`;
 
-            let spotlightShipping = spotlightBook.promoShippingText || '';
+            let spotlightShipping = currentLang === 'en' ? (spotlightBook.promoShippingTextEn || '') : (spotlightBook.promoShippingText || '');
             if (isSpotlightAmazon) {
-              spotlightShipping = language === 'en' ? 'In stock • Delivery from Amazon' : 'På lager • Levering frå Amazon';
+              spotlightShipping = currentLang === 'en' ? (spotlightBook.promoShippingTextEn || 'In stock • Delivery from Amazon') : 'På lager • Levering frå Amazon';
             } else if (!spotlightShipping) {
-              spotlightShipping = language === 'en' ? 'In stock • Fast delivery with signed copy' : 'På lager for rask sending • Signert utgåve';
+              spotlightShipping = currentLang === 'en' ? 'In stock • Fast delivery with signed copy' : 'På lager for rask sending • Signert utgåve';
             }
 
             return (
@@ -245,10 +269,10 @@ export default function Romanar() {
                   <div className="flex flex-wrap items-center gap-2.5 mb-3">
                     <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-300/80 text-amber-900 rounded-full text-xs font-semibold tracking-wider uppercase">
                       <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                      {spotlightBook.promoBadge || (isSpotlightAmazon ? 'Tilgjengeleg på Amazon' : 'Hovudutgjeving')}
+                      {spotlightBadge}
                     </span>
                     <span className="text-xs text-stone-500 font-mono">
-                      {spotlightBook.publishedYear} • {spotlightBook.pageCount ? `${spotlightBook.pageCount} sider` : 'Innbunden'}
+                      {spotlightBook.publishedYear} • {spotlightBook.pageCount ? `${spotlightBook.pageCount} ${currentLang === 'en' ? 'pages' : 'sider'}` : (currentLang === 'en' ? 'Hardcover' : 'Innbunden')}
                     </span>
                   </div>
 
@@ -259,18 +283,43 @@ export default function Romanar() {
                   </Link>
 
                   <p className="text-xs font-sans uppercase tracking-widest font-semibold text-brand-accent mb-3">
-                    av Øivind H. Solheim
+                    {currentLang === 'en' ? 'by Øivind H. Solheim' : 'av Øivind H. Solheim'}
                   </p>
 
-                  {spotlightBook.promoHeadline && (
-                    <p className="text-base sm:text-lg font-serif italic text-stone-700 leading-snug mb-4 border-l-2 border-amber-600 pl-3.5">
-                      «{spotlightBook.promoHeadline}»
-                    </p>
+                  {hasSpotlightLangInfo ? (
+                    <>
+                      {spotlightHeadline && (
+                        <p className="text-base sm:text-lg font-serif italic text-stone-700 leading-snug mb-4 border-l-2 border-amber-600 pl-3.5">
+                          «{spotlightHeadline}»
+                        </p>
+                      )}
+
+                      {spotlightDesc && (
+                        <p className="text-sm sm:text-base text-stone-600 leading-relaxed line-clamp-3 mb-6 max-w-2xl font-sans">
+                          {spotlightDesc}
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <div className="w-full max-w-2xl bg-amber-50/70 border border-amber-200/90 rounded-sm p-4 mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-start gap-2.5 text-xs sm:text-sm text-stone-700">
+                        <AlertCircle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                        <span>
+                          {currentLang === 'en'
+                            ? 'Not all information about this book is available in the language the website is currently set to (English).'
+                            : 'Ikkje all informasjon om denne boka er tilgjengeleg på språket nettsida er på no (norsk).'}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setLanguage(currentLang === 'en' ? 'no' : 'en')}
+                        className="px-3.5 py-2 bg-brand-dark hover:bg-black text-white text-[11px] font-semibold uppercase tracking-wider rounded-sm transition-colors inline-flex items-center gap-1.5 shrink-0 cursor-pointer"
+                      >
+                        <Globe className="w-3.5 h-3.5 text-amber-400" />
+                        <span>{currentLang === 'en' ? 'Switch to Norwegian' : 'Byt til engelsk'}</span>
+                      </button>
+                    </div>
                   )}
-
-                  <p className="text-sm sm:text-base text-stone-600 leading-relaxed line-clamp-3 mb-6 max-w-2xl font-sans">
-                    {spotlightDesc}
-                  </p>
 
                   {/* PRICE & DELIVERY */}
                   <div className="flex flex-wrap items-baseline gap-4 mb-6 pb-6 border-b border-stone-100 w-full">
@@ -300,20 +349,37 @@ export default function Romanar() {
                         href={rawLink}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="px-6 py-3.5 bg-brand-dark hover:bg-black text-white text-xs font-semibold tracking-widest uppercase transition-colors inline-flex items-center gap-2 shadow-md hover:shadow-lg cursor-pointer"
+                        className={`px-6 py-3.5 text-white text-xs font-semibold tracking-widest uppercase transition-colors inline-flex items-center gap-2 shadow-md hover:shadow-lg cursor-pointer ${
+                          isSpotlightAmazon
+                            ? 'bg-amber-600 hover:bg-amber-500'
+                            : 'bg-brand-dark hover:bg-black'
+                        }`}
                       >
                         <ShoppingBag className="w-4 h-4" />
-                        <span>{isSpotlightAmazon ? (language === 'en' ? 'Buy on Amazon' : 'Kjøp på Amazon') : (language === 'en' ? 'Buy Book Now' : 'Kjøp boka no')}</span>
+                        <span>{isSpotlightAmazon ? (currentLang === 'en' ? 'Buy on Amazon' : 'Kjøp på Amazon') : (currentLang === 'en' ? 'Buy Book Now' : 'Kjøp boka no')}</span>
                         <ExternalLink className="w-3 h-3 opacity-75" />
                       </a>
                     ) : null}
+
+                    {buyLinks.hasBothEditions && buyLinks.secondaryLink && buyLinks.secondaryLang && (
+                      <a
+                        href={buyLinks.secondaryLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-5 py-3.5 bg-stone-50 hover:bg-amber-50/80 border border-stone-300 hover:border-amber-500 text-brand-dark text-xs font-semibold tracking-wider uppercase transition-colors inline-flex items-center gap-2 cursor-pointer"
+                      >
+                        <Globe className="w-4 h-4 text-brand-accent" />
+                        <span>{getSecondaryEditionButtonLabel(buyLinks.secondaryLang, buyLinks.secondaryLink, currentLang)}</span>
+                        <ExternalLink className="w-3 h-3 opacity-60" />
+                      </a>
+                    )}
 
                     <Link
                       to={detailUrl}
                       className="px-6 py-3.5 border border-stone-300 hover:border-brand-dark text-brand-dark hover:bg-stone-50 text-xs font-semibold tracking-widest uppercase transition-colors inline-flex items-center gap-2"
                     >
                       <BookOpen className="w-4 h-4 text-brand-accent" />
-                      <span>{language === 'en' ? 'Read Details & Blurb' : 'Les meir & omtale'}</span>
+                      <span>{currentLang === 'en' ? 'Read Details & Blurb' : 'Les meir & omtale'}</span>
                     </Link>
                   </div>
                 </div>
@@ -426,195 +492,267 @@ export default function Romanar() {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {filteredBooks.map((book) => {
-              const rawLink = (language === 'en' && book.buyLinkEn) ? book.buyLinkEn : (book.buyLink || '');
-              const buyType = getBuyLinkType(rawLink);
-              const isAmazonBook = buyType === 'amazon';
-              const isStripeBook = buyType === 'stripe';
-              const displayTitle = (language === 'en' && book.titleEn) ? book.titleEn : book.title;
-              const displayDesc = (language === 'en' && book.descriptionEn) ? book.descriptionEn : book.description;
-              const effectivePrice = book.promoSpecialPrice || book.price || 0;
-              const slug = book.promoSlug || slugify(book.title);
-              const salesUrl = book.promoSlug ? `/salg/${slug}` : `/boker/${book.id}`;
-
-              // Shipping text logic respecting Amazon preferences
-              let shippingLabel = book.promoShippingText || '';
-              if (isAmazonBook) {
-                shippingLabel = language === 'en' ? 'Delivery from Amazon • In stock' : 'Levering frå Amazon • På lager';
-              } else if (!shippingLabel) {
-                shippingLabel = language === 'en' ? 'Fast delivery • Signed copy available' : 'På lager for rask sending • Signert utgåve';
-              }
-
-              return (
-                <article 
-                  key={book.id} 
-                  className="bg-white border border-stone-200/90 rounded-sm shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between overflow-hidden group"
+          <>
+            {/* TOP INFO BANNER WHEN SOME OR ALL BOOKS LACK LANGUAGE-SPECIFIC INFORMATION */}
+            {filteredBooks.some(b => !hasBookLanguageInfo(b, currentLang)) && (
+              <div className="mb-8 bg-amber-50/90 border border-amber-200 rounded-sm p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <Globe className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+                  <div>
+                    <h4 className="text-xs sm:text-sm font-semibold text-stone-900 mb-0.5">
+                      {currentLang === 'en'
+                        ? 'Not all book information is available in English'
+                        : 'Ikkje all bokinformasjon er tilgjengeleg på norsk'}
+                    </h4>
+                    <p className="text-xs text-stone-600 leading-relaxed">
+                      {currentLang === 'en'
+                        ? 'Some books on this page do not yet have information added in the language the website is currently set to. You can switch language to read full descriptions in Norwegian.'
+                        : 'Enkelte bøker på denne sida har ikkje informasjon lagt inn på språket nettsida er på no. Du kan byte språk for å lese omtalen på engelsk.'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setLanguage(currentLang === 'en' ? 'no' : 'en')}
+                  className="px-4 py-2.5 bg-brand-dark hover:bg-black text-white text-xs font-semibold tracking-wider uppercase rounded-sm transition-colors inline-flex items-center justify-center gap-2 shrink-0 cursor-pointer"
                 >
-                  {/* TOP COVER CONTAINER WITH PEDESTAL */}
-                  <div className="relative bg-[#F3EFEA]/70 p-8 flex items-center justify-center border-b border-stone-100 overflow-hidden h-[340px]">
-                    
-                    {/* BADGES */}
-                    <div className="absolute top-3.5 left-3.5 z-10 flex flex-col gap-1.5 items-start">
-                      {isAmazonBook ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-500 text-stone-950 font-bold text-[10px] tracking-widest uppercase rounded shadow-sm">
-                          <ShoppingBag className="w-3 h-3" /> Amazon
-                        </span>
-                      ) : book.promoBadge ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-brand-dark text-white text-[10px] tracking-wider uppercase font-semibold rounded shadow-sm">
-                          <Sparkles className="w-3 h-3 text-amber-300" /> {book.promoBadge}
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-white/90 text-stone-700 text-[10px] tracking-wider uppercase font-semibold border border-stone-200 rounded">
-                          {language === 'en' ? 'Original' : 'Innbunden'}
-                        </span>
-                      )}
+                  <Globe className="w-3.5 h-3.5 text-amber-400" />
+                  <span>{currentLang === 'en' ? 'Switch to Norwegian (Norsk)' : 'Byt til engelsk (English)'}</span>
+                </button>
+              </div>
+            )}
 
-                      {book.promoSpecialPrice && book.price && book.promoSpecialPrice < book.price && (
-                        <span className="inline-flex items-center px-2 py-0.5 bg-red-600 text-white text-[10px] font-bold uppercase rounded shadow-sm">
-                          {language === 'en' ? 'Sale' : 'Tilbod'}
-                        </span>
-                      )}
-                    </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {filteredBooks.map((book) => {
+                const buyLinks = resolveBookBuyLinks(book, currentLang);
+                const rawLink = buyLinks.hasLinkForCurrentLang ? buyLinks.primaryLink : '';
+                const isAmazonBook = getBuyLinkType(rawLink || buyLinks.primaryLink) === 'amazon';
+                const hasLangInfo = hasBookLanguageInfo(book, currentLang);
 
-                    {/* YEAR BADGE */}
-                    <div className="absolute top-3.5 right-3.5 z-10">
-                      <span className="text-[11px] font-mono text-stone-500 bg-white/80 px-2 py-0.5 rounded border border-stone-200/60">
-                        {book.publishedYear}
-                      </span>
-                    </div>
+                const displayTitle = (currentLang === 'en' && book.titleEn) ? book.titleEn : book.title;
+                const displayDesc = currentLang === 'en'
+                  ? (book.descriptionEn || book.promoDescriptionEn || (book.language === 'en' ? book.description : ''))
+                  : (book.description || book.promoDescription || '');
+                const displayHeadline = currentLang === 'en'
+                  ? (book.promoHeadlineEn || (book.language === 'en' ? book.promoHeadline : ''))
+                  : (book.promoHeadline || '');
+                const displayBadge = currentLang === 'en'
+                  ? book.promoBadgeEn
+                  : book.promoBadge;
 
-                    {/* BOOK COVER WITH 3D SHADOW & SPINE */}
-                    <Link to={salesUrl} className="relative block h-full aspect-[2/3] transition-transform duration-500 group-hover:scale-105">
-                      {book.coverImageUrl ? (
-                        <div className="w-full h-full rounded shadow-[0_12px_28px_-6px_rgba(0,0,0,0.3)] border border-stone-200 overflow-hidden bg-white">
-                          <img 
-                            src={book.coverImageUrl} 
-                            alt={displayTitle}
-                            className="w-full h-full object-cover"
-                          />
-                          {/* Book spine line shadow */}
-                          <div className="absolute inset-y-0 left-0 w-3 bg-gradient-to-r from-black/25 via-transparent to-transparent pointer-events-none" />
-                        </div>
-                      ) : (
-                        <div className="w-full h-full rounded bg-stone-200 border border-stone-300 flex flex-col items-center justify-center p-6 text-center shadow-md">
-                          <BookOpen className="w-10 h-10 text-stone-400 mb-2" strokeWidth={1} />
-                          <span className="font-serif text-sm text-stone-700 leading-tight">{displayTitle}</span>
-                        </div>
-                      )}
-                    </Link>
-                  </div>
+                const effectivePrice = book.promoSpecialPrice || book.price || 0;
+                const slug = book.promoSlug || slugify(book.title);
+                const salesUrl = book.promoSlug ? `/salg/${slug}` : `/boker/${book.id}`;
 
-                  {/* BOOK DETAILS BODY */}
-                  <div className="p-6 flex flex-col flex-grow">
-                    
-                    {/* FORMAT & METADATA */}
-                    <div className="flex items-center gap-2 text-[11px] text-stone-500 uppercase tracking-wider mb-2 font-mono">
-                      <span>{isAmazonBook ? 'Amazon utgåve' : 'Innbunden roman'}</span>
-                      {book.pageCount ? (
-                        <>
-                          <span>•</span>
-                          <span>{book.pageCount} sider</span>
-                        </>
-                      ) : null}
-                    </div>
+                // Shipping text logic respecting Amazon preferences & language
+                let shippingLabel = currentLang === 'en' ? (book.promoShippingTextEn || '') : (book.promoShippingText || '');
+                if (isAmazonBook) {
+                  shippingLabel = currentLang === 'en'
+                    ? (book.promoShippingTextEn || 'Delivery from Amazon • In stock')
+                    : 'Levering frå Amazon • På lager';
+                } else if (!shippingLabel) {
+                  shippingLabel = currentLang === 'en'
+                    ? 'Fast delivery • Signed copy available'
+                    : 'På lager for rask sending • Signert utgåve';
+                }
 
-                    {/* TITLE */}
-                    <Link to={salesUrl}>
-                      <h3 className="text-xl sm:text-2xl font-serif text-brand-dark group-hover:text-brand-accent transition-colors mb-1.5 leading-tight">
-                        {displayTitle}
-                      </h3>
-                    </Link>
-
-                    <p className="text-[11px] font-sans uppercase tracking-widest font-semibold text-brand-accent mb-2">
-                      av Øivind H. Solheim
-                    </p>
-
-                    {/* HEADLINE OR SHORT PROMO */}
-                    {book.promoHeadline && (
-                      <p className="text-xs font-serif italic text-stone-600 mb-3 line-clamp-1 border-l-2 border-stone-300 pl-2">
-                        «{book.promoHeadline}»
-                      </p>
-                    )}
-
-                    {/* DESCRIPTION BLURB */}
-                    <p className="text-xs text-stone-600 leading-relaxed line-clamp-3 mb-6 font-sans">
-                      {displayDesc}
-                    </p>
-
-                    {/* FOOTER: STOCK & PRICE & BUTTONS */}
-                    <div className="mt-auto pt-4 border-t border-stone-100 space-y-4">
+                return (
+                  <article 
+                    key={book.id} 
+                    className="bg-white border border-stone-200/90 rounded-sm shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between overflow-hidden group"
+                  >
+                    {/* TOP COVER CONTAINER WITH PEDESTAL */}
+                    <div className="relative bg-[#F3EFEA]/70 p-8 flex items-center justify-center border-b border-stone-100 overflow-hidden h-[340px]">
                       
-                      {/* STOCK & SHIPPING STATUS */}
-                      <div className="flex items-center justify-between gap-2 text-[11px]">
-                        <span className="inline-flex items-center gap-1.5 text-stone-600 font-sans">
-                          <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                          <span className="truncate">{shippingLabel}</span>
+                      {/* BADGES */}
+                      <div className="absolute top-3.5 left-3.5 z-10 flex flex-col gap-1.5 items-start">
+                        {isAmazonBook && rawLink ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-500 text-stone-950 font-bold text-[10px] tracking-widest uppercase rounded shadow-sm">
+                            <ShoppingBag className="w-3 h-3" /> Amazon
+                          </span>
+                        ) : displayBadge ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-brand-dark text-white text-[10px] tracking-wider uppercase font-semibold rounded shadow-sm">
+                            <Sparkles className="w-3 h-3 text-amber-300" /> {displayBadge}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-white/90 text-stone-700 text-[10px] tracking-wider uppercase font-semibold border border-stone-200 rounded">
+                            {currentLang === 'en' ? 'Hardcover' : 'Innbunden'}
+                          </span>
+                        )}
+
+                        {book.promoSpecialPrice && book.price && book.promoSpecialPrice < book.price && (
+                          <span className="inline-flex items-center px-2 py-0.5 bg-red-600 text-white text-[10px] font-bold uppercase rounded shadow-sm">
+                            {currentLang === 'en' ? 'Sale' : 'Tilbod'}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* YEAR BADGE */}
+                      <div className="absolute top-3.5 right-3.5 z-10">
+                        <span className="text-[11px] font-mono text-stone-500 bg-white/80 px-2 py-0.5 rounded border border-stone-200/60">
+                          {book.publishedYear}
                         </span>
                       </div>
 
-                      {/* PRICE & BUTTONS ROW */}
-                      <div className="flex items-center justify-between gap-3">
-                        
-                        {/* PRICE */}
-                        <div>
-                          {effectivePrice > 0 ? (
-                            <div className="flex items-baseline gap-1.5">
-                              <span className="text-xl font-serif font-bold text-brand-dark">
-                                kr {effectivePrice},-
-                              </span>
-                              {book.promoSpecialPrice && book.price && book.promoSpecialPrice < book.price && (
-                                <span className="text-xs text-stone-400 line-through font-mono">
-                                  kr {book.price},-
-                                </span>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-xs text-stone-400 italic">
-                              {language === 'en' ? 'Price on request' : 'Pris på førespurnad'}
-                            </span>
+                      {/* BOOK COVER WITH 3D SHADOW & SPINE */}
+                      <Link to={salesUrl} className="relative block h-full aspect-[2/3] transition-transform duration-500 group-hover:scale-105">
+                        {book.coverImageUrl ? (
+                          <div className="w-full h-full rounded shadow-[0_12px_28px_-6px_rgba(0,0,0,0.3)] border border-stone-200 overflow-hidden bg-white">
+                            <img 
+                              src={book.coverImageUrl} 
+                              alt={displayTitle}
+                              className="w-full h-full object-cover"
+                            />
+                            {/* Book spine line shadow */}
+                            <div className="absolute inset-y-0 left-0 w-3 bg-gradient-to-r from-black/25 via-transparent to-transparent pointer-events-none" />
+                          </div>
+                        ) : (
+                          <div className="w-full h-full rounded bg-stone-200 border border-stone-300 flex flex-col items-center justify-center p-6 text-center shadow-md">
+                            <BookOpen className="w-10 h-10 text-stone-400 mb-2" strokeWidth={1} />
+                            <span className="font-serif text-sm text-stone-700 leading-tight">{displayTitle}</span>
+                          </div>
+                        )}
+                      </Link>
+                    </div>
+
+                    {/* BOOK DETAILS BODY */}
+                    <div className="p-6 flex flex-col flex-grow">
+                      
+                      {/* FORMAT & METADATA */}
+                      <div className="flex items-center gap-2 text-[11px] text-stone-500 uppercase tracking-wider mb-2 font-mono">
+                        <span>
+                          {isAmazonBook && rawLink
+                            ? (currentLang === 'en' ? 'Amazon Edition' : 'Amazon-utgåve')
+                            : (currentLang === 'en' ? 'Hardcover Book' : 'Innbunden bok')}
+                        </span>
+                        {book.pageCount ? (
+                          <>
+                            <span>•</span>
+                            <span>{book.pageCount} {currentLang === 'en' ? 'pages' : 'sider'}</span>
+                          </>
+                        ) : null}
+                      </div>
+
+                      {/* TITLE */}
+                      <Link to={salesUrl}>
+                        <h3 className="text-xl sm:text-2xl font-serif text-brand-dark group-hover:text-brand-accent transition-colors mb-1.5 leading-tight">
+                          {displayTitle}
+                        </h3>
+                      </Link>
+
+                      <p className="text-[11px] font-sans uppercase tracking-widest font-semibold text-brand-accent mb-2">
+                        {currentLang === 'en' ? 'by Øivind H. Solheim' : 'av Øivind H. Solheim'}
+                      </p>
+
+                      {hasLangInfo ? (
+                        <>
+                          {/* HEADLINE OR SHORT PROMO */}
+                          {displayHeadline && (
+                            <p className="text-xs font-serif italic text-stone-600 mb-3 line-clamp-1 border-l-2 border-stone-300 pl-2">
+                              «{displayHeadline}»
+                            </p>
                           )}
+
+                          {/* DESCRIPTION BLURB */}
+                          <p className="text-xs text-stone-600 leading-relaxed line-clamp-3 mb-6 font-sans">
+                            {displayDesc}
+                          </p>
+                        </>
+                      ) : (
+                        <div className="bg-amber-50/70 border border-amber-200/80 rounded-sm p-3.5 mb-5 text-xs text-stone-700 flex flex-col gap-2.5">
+                          <div className="flex items-start gap-2">
+                            <AlertCircle className="w-3.5 h-3.5 text-amber-700 shrink-0 mt-0.5" />
+                            <span className="leading-snug">
+                              {currentLang === 'en'
+                                ? 'Not all information for this book is available in the current website language (English).'
+                                : 'Ikkje all informasjon om denne boka er tilgjengeleg på språket nettsida er på no (norsk).'}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setLanguage(currentLang === 'en' ? 'no' : 'en')}
+                            className="self-start px-3 py-1.5 bg-white hover:bg-stone-100 border border-amber-300 text-stone-900 font-semibold text-[10px] uppercase tracking-wider rounded-sm transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+                          >
+                            <Globe className="w-3 h-3 text-amber-700" />
+                            <span>{currentLang === 'en' ? 'Switch to Norwegian' : 'Byt til engelsk'}</span>
+                          </button>
+                        </div>
+                      )}
+
+                      {/* FOOTER: STOCK & PRICE & BUTTONS */}
+                      <div className="mt-auto pt-4 border-t border-stone-100 space-y-4">
+                        
+                        {/* STOCK & SHIPPING STATUS */}
+                        <div className="flex items-center justify-between gap-2 text-[11px]">
+                          <span className="inline-flex items-center gap-1.5 text-stone-600 font-sans">
+                            <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                            <span className="truncate">{shippingLabel}</span>
+                          </span>
                         </div>
 
-                        {/* CTA BUTTONS */}
-                        <div className="flex items-center gap-2">
-                          {rawLink ? (
-                            <a
-                              href={rawLink}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className={`px-3.5 py-2.5 text-[11px] font-semibold tracking-wider uppercase transition-colors inline-flex items-center gap-1.5 rounded-sm shadow-sm cursor-pointer ${
-                                isAmazonBook 
-                                  ? 'bg-amber-600 hover:bg-amber-500 text-white' 
-                                  : 'bg-brand-dark hover:bg-black text-white'
-                              }`}
-                              title={isAmazonBook ? 'Kjøp frå Amazon' : 'Kjøp boka (Stripe)'}
-                            >
-                              <ShoppingBag className="w-3.5 h-3.5" />
-                              <span>{isAmazonBook ? 'Amazon' : (language === 'en' ? 'Buy' : 'Kjøp')}</span>
-                              <ExternalLink className="w-2.5 h-2.5 opacity-70" />
-                            </a>
-                          ) : null}
+                        {/* PRICE & BUTTONS ROW */}
+                        <div className="flex items-center justify-between gap-3">
+                          
+                          {/* PRICE */}
+                          <div>
+                            {effectivePrice > 0 ? (
+                              <div className="flex items-baseline gap-1.5">
+                                <span className="text-xl font-serif font-bold text-brand-dark">
+                                  kr {effectivePrice},-
+                                </span>
+                                {book.promoSpecialPrice && book.price && book.promoSpecialPrice < book.price && (
+                                  <span className="text-xs text-stone-400 line-through font-mono">
+                                    kr {book.price},-
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-stone-400 italic">
+                                {currentLang === 'en' ? 'Price on request' : 'Pris på førespurnad'}
+                              </span>
+                            )}
+                          </div>
 
-                          <Link
-                            to={salesUrl}
-                            className="px-3 py-2.5 border border-stone-300 hover:border-brand-dark text-brand-dark text-[11px] font-semibold tracking-wider uppercase transition-colors inline-flex items-center gap-1 rounded-sm"
-                            title="Les meir om boka"
-                          >
-                            <span>{language === 'en' ? 'Details' : 'Les meir'}</span>
-                            <ArrowRight className="w-3 h-3 text-stone-500" />
-                          </Link>
+                          {/* CTA BUTTONS */}
+                          <div className="flex items-center gap-2">
+                            {rawLink ? (
+                              <a
+                                href={rawLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={`px-3.5 py-2.5 text-[11px] font-semibold tracking-wider uppercase transition-colors inline-flex items-center gap-1.5 rounded-sm shadow-sm cursor-pointer ${
+                                  isAmazonBook 
+                                    ? 'bg-amber-600 hover:bg-amber-500 text-white' 
+                                    : 'bg-brand-dark hover:bg-black text-white'
+                                }`}
+                                title={isAmazonBook ? (currentLang === 'en' ? 'Buy from Amazon' : 'Kjøp frå Amazon') : (currentLang === 'en' ? 'Buy book (Stripe)' : 'Kjøp boka (Stripe)')}
+                              >
+                                <ShoppingBag className="w-3.5 h-3.5" />
+                                <span>{isAmazonBook ? 'Amazon' : (currentLang === 'en' ? 'Buy' : 'Kjøp')}</span>
+                                <ExternalLink className="w-2.5 h-2.5 opacity-70" />
+                              </a>
+                            ) : null}
+
+                            <Link
+                              to={salesUrl}
+                              className="px-3 py-2.5 border border-stone-300 hover:border-brand-dark text-brand-dark text-[11px] font-semibold tracking-wider uppercase transition-colors inline-flex items-center gap-1 rounded-sm"
+                              title={currentLang === 'en' ? 'Read more about the book' : 'Les meir om boka'}
+                            >
+                              <span>{currentLang === 'en' ? 'Details' : 'Les meir'}</span>
+                              <ArrowRight className="w-3 h-3 text-stone-500" />
+                            </Link>
+                          </div>
+
                         </div>
 
                       </div>
 
                     </div>
-
-                  </div>
-                </article>
-              );
-            })}
-          </div>
+                  </article>
+                );
+              })}
+            </div>
+          </>
         )}
 
       </section>
@@ -625,13 +763,13 @@ export default function Romanar() {
           <div className="max-w-xl">
             <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-amber-900 mb-2">
               <HeartHandshake className="w-4 h-4 text-amber-700" />
-              <span>{language === 'en' ? 'Libraries & Book Clubs' : 'For bokhandlarar, bibliotek og lesesirklar'}</span>
+              <span>{currentLang === 'en' ? 'Libraries & Book Clubs' : 'For bokhandlarar, bibliotek og lesesirklar'}</span>
             </div>
             <h3 className="text-2xl font-serif text-brand-dark mb-2">
-              {language === 'en' ? 'Interested in bulk orders or book events?' : 'Ønsker du fleire eksemplar eller forfattarbesøk?'}
+              {currentLang === 'en' ? 'Interested in bulk orders or book events?' : 'Ønsker du fleire eksemplar eller forfattarbesøk?'}
             </h3>
             <p className="text-xs sm:text-sm text-stone-600 leading-relaxed">
-              {language === 'en'
+              {currentLang === 'en'
                 ? 'We offer bulk discounts for book clubs, schools, and organizations. Contact the author directly for inquiries or events.'
                 : 'For lesesirklar, bibliotek og større bestillingar tilbyr vi særskilte rabattar. Ta gjerne kontakt med forfattaren direkte for førespurnader om foredrag eller bokbad.'}
             </p>
@@ -641,7 +779,7 @@ export default function Romanar() {
             to="/om-meg"
             className="px-6 py-3.5 bg-brand-dark hover:bg-black text-white text-xs font-semibold tracking-widest uppercase transition-colors inline-flex items-center gap-2 shrink-0"
           >
-            <span>{language === 'en' ? 'Contact Author' : 'Ta kontakt her'}</span>
+            <span>{currentLang === 'en' ? 'Contact Author' : 'Ta kontakt her'}</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </Link>
         </div>
@@ -658,7 +796,7 @@ export default function Romanar() {
             whileTap={{ scale: 0.9 }}
             onClick={() => navigate('/admin?tab=books&new=true')}
             className="fixed bottom-8 right-8 w-14 h-14 bg-brand-dark text-white rounded-full shadow-2xl flex items-center justify-center hover:bg-black transition-colors z-50 group border border-white/20"
-            title="Ny bok i nettbutikken"
+            title={currentLang === 'en' ? 'Add new book to store' : 'Ny bok i nettbutikken'}
           >
             <Plus className="w-6 h-6" />
           </motion.button>
